@@ -8,9 +8,10 @@ import { AdminTabs } from '@/components/admin-tabs';
 export default async function AllCourses({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; success?: string }>;
+  searchParams: Promise<{ error?: string; success?: string; archive?: string }>;
 }) {
   await requireRole('admin');
+  const query = await searchParams;
   const courses = all<{
     id: string;
     title: string;
@@ -18,7 +19,7 @@ export default async function AllCourses({
     status: string;
     students: number;
   }>(
-    `SELECT c.id, c.title, c.status, u.name teacher, (SELECT COUNT(*) FROM enrollments e WHERE e.course_id = c.id) students FROM courses c JOIN users u ON u.id = c.owner_id ORDER BY c.updated_at DESC`,
+    `SELECT c.id, c.title, c.status, u.name teacher, (SELECT COUNT(*) FROM enrollments e WHERE e.course_id = c.id) students FROM courses c JOIN users u ON u.id = c.owner_id WHERE c.status ${query.archive === '1' ? '=' : '!='} 'archived' ORDER BY c.updated_at DESC`,
   );
   return (
     <>
@@ -32,7 +33,15 @@ export default async function AllCourses({
         </Link>
       </PageHeading>
       <AdminTabs active="courses" />
-      <Notice {...await searchParams} />
+      <Notice {...query} />
+      <div className="workspace-tabs">
+        <Link href="/admin/courses" className={query.archive !== '1' ? 'selected' : ''}>
+          Белсенді курстар
+        </Link>
+        <Link href="/admin/courses?archive=1" className={query.archive === '1' ? 'selected' : ''}>
+          Архив
+        </Link>
+      </div>
       <div className="table-panel">
         <table className="data-table">
           <thead>

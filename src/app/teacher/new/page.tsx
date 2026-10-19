@@ -2,6 +2,8 @@ import { requireRole } from '@/lib/auth';
 import { createCourse } from '@/app/actions';
 import { Notice, PageHeading } from '@/components/ui';
 import { SubmitButton } from '@/components/submit-button';
+import { CourseFields } from '@/components/course-fields';
+import { CoverPicker } from '@/components/cover-picker';
 export default async function NewCourse({
   searchParams,
 }: {
@@ -17,29 +19,9 @@ export default async function NewCourse({
       <Notice {...await searchParams} />
       <div className="panel narrow-panel">
         <form action={createCourse} className="form-stack">
-          <label>
-            Курс атауы
-            <input name="title" required minLength={5} maxLength={140} />
-          </label>
-          <label>
-            Сипаттама
-            <textarea name="description" required minLength={30} maxLength={5000} rows={5} />
-          </label>
-          <div className="form-row">
-            <label>
-              Санат
-              <select name="category">
-                {['Математика', 'Тілдер', 'Технология', 'Жаратылыстану', 'Басқа'].map((item) => (
-                  <option key={item}>{item}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Бағасы, ₸
-              <input type="number" name="price" min={0} max={10000000} defaultValue={0} required />
-              <small>Тегін курс үшін 0. Төлем әзірге қосылмаған.</small>
-            </label>
-          </div>
+          <CourseFields />
+          <CoverPicker />
+          <p className="help-text">Курс жасалғаннан кейін өз суретіңізді мұқабаға жүктей аласыз.</p>
           <SubmitButton>Курс жасап, сабақ қосу →</SubmitButton>
         </form>
       </div>

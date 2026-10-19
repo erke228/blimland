@@ -15,7 +15,9 @@ export default async function Dashboard({
     'SELECT course_id FROM enrollments WHERE user_id = ? ORDER BY created_at DESC',
     user.id,
   );
-  const courses = ids.map((row) => getCourse(row.course_id)).filter((c): c is Course => !!c);
+  const courses = ids
+    .map((row) => getCourse(row.course_id))
+    .filter((c): c is Course => !!c && c.status === 'published');
   const complete = one<{ n: number }>(
     'SELECT COUNT(*) n FROM lesson_progress WHERE user_id = ? AND completed_at IS NOT NULL',
     user.id,

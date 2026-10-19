@@ -9,14 +9,19 @@ import { currentUser, requireRole, requireUser, SESSION_COOKIE } from '@/lib/aut
 import { one, run, transaction } from '@/lib/db';
 import { getCourse } from '@/lib/courses';
 import { safeReturnPath, settings } from '@/lib/management';
+import { ManagementError } from '@/lib/management';
 import {
-  hashPassword,
-  verifyPassword,
-  issueSession,
-  rateLimit,
-  safeVideoUrl,
-  tokenHash,
-} from '@/lib/security';
+  courseInput,
+  saveCourseInformation,
+  saveCoverPreset,
+  saveLectureCoverPreset,
+  reopenCourse,
+  writeLesson,
+  saveSectionInformation,
+  assertCourseComplete,
+} from '@/lib/course-editor';
+import { coverPresets } from '@/lib/cover-presets';
+import { hashPassword, verifyPassword, issueSession, rateLimit, tokenHash } from '@/lib/security';
 
 const credentials = z.object({ email: z.email().max(254), password: z.string().min(12).max(128) });
 const value = (form: FormData, key: string) => String(form.get(key) ?? '').trim();
@@ -173,20 +178,10 @@ export async function enroll(form: FormData) {
 
 export async function createCourse(form: FormData) {
   const user = await requireRole('teacher', 'admin');
-  const parsed = z
-    .object({
-      title: z.string().min(5).max(140),
-      description: z.string().min(30).max(5000),
-      category: z.enum(['Математика', 'Тілдер', 'Технология', 'Жаратылыстану', 'Басқа']),
-      price: z.coerce.number().int().min(0).max(10000000),
-    })
-    .safeParse({
-      title: value(form, 'title'),
-      description: value(form, 'description'),
-      category: value(form, 'category'),
-      price: value(form, 'price') || '0',
-    });
+  const parsed = courseInput.safeParse(courseFormData(form));
   if (!parsed.success) fail('/teacher/new', 'courseform');
+  if (value(form, 'coverPreset') && !coverPresets.some((p) => p.id === value(form, 'coverPreset')))
+    fail('/teacher/new', 'coverinvalid');
   const course = parsed.data;
   const id = randomUUID();
   transaction(() => {
@@ -197,7 +192,7 @@ export async function createCourse(form: FormData) {
       course.title,
       course.description,
       course.category,
-      'Бастапқы',
+      course.level,
       course.price,
       'draft',
       'teal',
@@ -205,8 +200,77 @@ export async function createCourse(form: FormData) {
       Date.now(),
     );
     run('INSERT INTO sections VALUES (?, ?, ?, ?)', randomUUID(), id, 'Негізгі бөлім', 0);
+    saveCoverPreset(user.id, id, value(form, 'coverPreset') || 'books');
   });
   redirect(`/teacher/courses/${id}`);
+}
+
+function courseFormData(form: FormData) {
+  return {
+    title: value(form, 'title'),
+    description: value(form, 'description'),
+    category: value(form, 'category'),
+    level: value(form, 'level') || 'Бастапқы',
+    price: value(form, 'price') || '0',
+  };
+}
+async function editorAction(
+  form: FormData,
+  work: (actorId: string, courseId: string) => void,
+  anchor = '',
+) {
+  const user = await requireRole('teacher', 'admin');
+  const id = value(form, 'courseId');
+  try {
+    work(user.id, id);
+  } catch (error) {
+    if (error instanceof ManagementError) fail(`/teacher/courses/${id}`, error.code);
+    throw error;
+  }
+  revalidatePath('/');
+  revalidatePath('/courses');
+  revalidatePath(`/teacher/courses/${id}`);
+  revalidatePath(`/courses/${id}`);
+  redirect(`/teacher/courses/${id}?success=saved${anchor}`);
+}
+export async function saveCourseDetails(form: FormData) {
+  return editorAction(
+    form,
+    (actorId, id) => saveCourseInformation(actorId, id, courseFormData(form)),
+    '#settings',
+  );
+}
+export async function selectCourseCover(form: FormData) {
+  return editorAction(
+    form,
+    (actorId, id) => saveCoverPreset(actorId, id, value(form, 'coverPreset')),
+    '#cover',
+  );
+}
+export async function selectLectureCover(form: FormData) {
+  const lessonId = value(form, 'lessonId');
+  return editorAction(
+    form,
+    (actorId, id) => saveLectureCoverPreset(actorId, id, lessonId, value(form, 'coverPreset')),
+    `&lesson=${encodeURIComponent(lessonId)}#lecture-cover`,
+  );
+}
+export async function reopenCourseForEditing(form: FormData) {
+  return editorAction(form, reopenCourse);
+}
+export async function updateSection(form: FormData) {
+  return editorAction(
+    form,
+    (actorId, id) =>
+      saveSectionInformation(
+        actorId,
+        id,
+        value(form, 'sectionId'),
+        value(form, 'title'),
+        Number(value(form, 'position')),
+      ),
+    '#structure',
+  );
 }
 
 async function editableCourse(form: FormData) {
@@ -234,59 +298,37 @@ export async function addSection(form: FormData) {
 }
 
 export async function saveLesson(form: FormData) {
-  const { course } = await editableCourse(form);
-  const sectionId = value(form, 'sectionId');
-  if (!one('SELECT id FROM sections WHERE id = ? AND course_id = ?', sectionId, course.id))
-    fail('/teacher', 'forbidden');
-  const title = value(form, 'title');
-  const body = value(form, 'body');
-  const video = safeVideoUrl(value(form, 'videoUrl'));
-  const minutes = Number(value(form, 'minutes'));
-  if (
-    title.length < 3 ||
-    title.length > 180 ||
-    body.length > 30000 ||
-    (!body && !video) ||
-    video === null ||
-    !Number.isInteger(minutes) ||
-    minutes < 1 ||
-    minutes > 600
-  )
-    fail(`/teacher/courses/${course.id}`, 'lessonform');
-  const lessonId = value(form, 'lessonId');
-  if (lessonId) {
-    if (!one('SELECT id FROM lessons WHERE id = ? AND section_id = ?', lessonId, sectionId))
-      fail('/teacher', 'forbidden');
-    run(
-      'UPDATE lessons SET title = ?, body = ?, video_url = ?, duration_minutes = ?, is_preview = ? WHERE id = ?',
-      title,
-      body,
-      video,
-      minutes,
-      form.get('preview') === 'on' ? 1 : 0,
-      lessonId,
-    );
-  } else {
-    run(
-      'INSERT INTO lessons VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      randomUUID(),
-      sectionId,
-      title,
-      body,
-      video,
-      minutes,
-      one<{ n: number }>('SELECT COUNT(*) n FROM lessons WHERE section_id = ?', sectionId)!.n,
-      form.get('preview') === 'on' ? 1 : 0,
-    );
+  const { user, course } = await editableCourse(form);
+  let lessonId = '';
+  try {
+    lessonId = writeLesson(user.id, course.id, {
+      id: value(form, 'lessonId'),
+      sectionId: value(form, 'sectionId'),
+      title: value(form, 'title'),
+      body: value(form, 'body'),
+      videoUrl: value(form, 'videoUrl'),
+      minutes: Number(value(form, 'minutes')),
+      preview: form.get('preview') === 'on',
+      summary: value(form, 'summary'),
+      objectives: value(form, 'objectives'),
+      position: value(form, 'position') ? Number(value(form, 'position')) : undefined,
+    });
+  } catch (error) {
+    if (error instanceof ManagementError) fail(`/teacher/courses/${course.id}`, error.code);
+    throw error;
   }
-  run('UPDATE courses SET updated_at = ? WHERE id = ?', Date.now(), course.id);
   revalidatePath(`/teacher/courses/${course.id}`);
-  redirect(`/teacher/courses/${course.id}?success=saved`);
+  redirect(`/teacher/courses/${course.id}?lesson=${lessonId}&success=saved#lesson-editor`);
 }
 
 export async function submitCourse(form: FormData) {
   const { user, course } = await editableCourse(form);
-  if (!course.lesson_count) fail(`/teacher/courses/${course.id}`, 'emptycourse');
+  try {
+    assertCourseComplete(course.id);
+  } catch (error) {
+    if (error instanceof ManagementError) fail(`/teacher/courses/${course.id}`, error.code);
+    throw error;
+  }
   run(
     "UPDATE courses SET status = 'submitted', updated_at = ? WHERE id = ?",
     Date.now(),

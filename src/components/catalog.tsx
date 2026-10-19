@@ -30,7 +30,8 @@ export async function Catalog({ q = '', category = '' }: { q?: string; category?
         ? 'Оқытушы кабинеті'
         : 'Оқуды жалғастыру';
   const courses = listCourses(q.slice(0, 200), category.slice(0, 100));
-  const categories = ['Барлығы', 'Математика', 'Тілдер', 'Технология', 'Жаратылыстану'];
+  const categories = ['Барлығы', ...new Set(listCourses().map((course) => course.category))];
+  const featured = courses.find((course) => course.first_lesson_id);
   return (
     <>
       <PageHeading
@@ -55,9 +56,28 @@ export async function Catalog({ q = '', category = '' }: { q?: string; category?
           <Link href={startHref} className="button dark">
             {startLabel} <ArrowUpRight size={17} />
           </Link>
-          <div className="hero-note">
-            <Check size={15} /> Тегін курстардан бастаңыз
-          </div>
+          {featured ? (
+            <Link
+              className="hero-lecture"
+              href={
+                featured.first_lesson_preview
+                  ? `/learn/${featured.first_lesson_id}`
+                  : `/courses/${featured.id}`
+              }
+            >
+              <BookOpen size={20} />
+              <span>
+                <small>ДӘРІСТІ АШУ</small>
+                <b>{featured.first_lesson_title}</b>
+                <small>{featured.teacher}</small>
+              </span>
+              <ArrowUpRight size={20} />
+            </Link>
+          ) : (
+            <div className="hero-note">
+              <Check size={15} /> Тегін курстардан бастаңыз
+            </div>
+          )}
         </div>
         <div className="hero-art" aria-hidden="true">
           <span className="art-dotted" />
@@ -123,9 +143,9 @@ export async function Catalog({ q = '', category = '' }: { q?: string; category?
         <div className="section-title">
           <div>
             <h2>
-              Курстарды зерттеңіз <span className="count-pill">{courses.length}</span>
+              Дәрістер мен курстар <span className="count-pill">{courses.length}</span>
             </h2>
-            <p>Жаңа дағдыға алғашқы қадам жасаңыз.</p>
+            <p>Оқытушылар жариялаған оқу материалдары. Дәрісті карточкадан бірден ашыңыз.</p>
           </div>
         </div>
         <form method="get" action="/courses" className="catalog-tools">
@@ -168,14 +188,6 @@ export async function Catalog({ q = '', category = '' }: { q?: string; category?
             href="/courses"
             label="Барлық курс"
           />
-        )}
-        {courses.some((course) =>
-          ['algebra-basics', 'kazakh-writing', 'digital-skills'].includes(course.id),
-        ) && (
-          <p className="demo-note">
-            «Алгебра», «Қазақ тілінде сауатты жазу» және «Цифрлық сауаттылық» — платформаны
-            тексеруге арналған үлгі курстар.
-          </p>
         )}
       </section>
     </>

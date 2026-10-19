@@ -3,7 +3,7 @@ import type { NextConfig } from 'next';
 const config: NextConfig = {
   output: 'standalone',
   poweredByHeader: false,
-  serverExternalPackages: ['node:sqlite', 'mammoth', 'yauzl', 'sanitize-html'],
+  serverExternalPackages: ['node:sqlite', 'mammoth', 'yauzl', 'sanitize-html', 'sharp'],
   outputFileTracingIncludes: { '/*': ['./scripts/convert-docx.cjs'] },
   outputFileTracingExcludes: {
     '/*': ['./data/**', './uploads/**', './.test-data/**', './.local/**'],

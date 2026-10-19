@@ -8,6 +8,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { migrate, one, run } from '../src/lib/db';
 import { hashPassword } from '../src/lib/security';
 import { pdfFixture, docxFixture } from '../tests/document-fixtures';
+import sharp from 'sharp';
 
 mkdirSync('.test-data', { recursive: true });
 process.env.DATABASE_PATH = resolve('.test-data', `${randomUUID()}.sqlite`);
@@ -216,6 +217,50 @@ try {
   );
   const id = location.split('/').pop()!;
   const editorPath = `/teacher/courses/${id}`;
+  const coverForm = await teacher.html(editorPath);
+  await student.submit(
+    editorPath,
+    { courseId: id, coverPreset: 'brain' },
+    'name="coverPreset"',
+    coverForm,
+  );
+  assert.equal(
+    one('SELECT course_id FROM course_presentation WHERE course_id=? AND preset=?', id, 'brain'),
+    undefined,
+  );
+  await teacher.submit(editorPath, { courseId: id, coverPreset: 'brain' }, 'name="coverPreset"');
+  assert((await teacher.html(`/courses/${id}`)).includes('illustration-brain'));
+  const coverBody = new FormData();
+  coverBody.set('courseId', id);
+  const coverBytes = await sharp({
+    create: { width: 480, height: 270, channels: 3, background: '#88c4a8' },
+  })
+    .png()
+    .toBuffer();
+  coverBody.set('file', new Blob([new Uint8Array(coverBytes)]), 'cover.png');
+  const coverUpload = await fetch(`${origin}/api/course-covers`, {
+    method: 'POST',
+    body: coverBody,
+    headers: { origin, cookie: teacher.cookie },
+    redirect: 'manual',
+  });
+  assert.equal(coverUpload.status, 303);
+  assert(!coverUpload.headers.get('location')?.includes('error='));
+  const coverPath = `/courses/${id}/cover`;
+  assert.equal((await guest.get(coverPath)).status, 404);
+  assert.equal((await teacher.get(coverPath)).status, 200);
+  await teacher.submit(
+    editorPath,
+    {
+      courseId: id,
+      title: 'Интеграциялық курс',
+      description: 'Бұл курс нақты серверлік оқу сценарийін тексеруге арналған.',
+      category: 'Технология',
+      level: 'Орташа',
+      price: '0',
+    },
+    'Курс параметрлерін сақтау',
+  );
   const sectionId = one<{ id: string }>('SELECT id FROM sections WHERE course_id = ?', id)!.id;
   await teacher.submit(
     editorPath,
@@ -235,6 +280,27 @@ try {
     sectionId,
   )!.id;
   const pdfBytes = await pdfFixture();
+  await teacher.submit(
+    `${editorPath}?lesson=${lessonId}`,
+    { courseId: id, lessonId, coverPreset: 'science' },
+    'Дәріс иллюстрациясын сақтау',
+  );
+  assert((await teacher.html(`/learn/${lessonId}`)).includes('illustration-science'));
+  const lectureCoverBody = new FormData();
+  lectureCoverBody.set('courseId', id);
+  lectureCoverBody.set('lessonId', lessonId);
+  lectureCoverBody.set('file', new Blob([new Uint8Array(coverBytes)]), 'lecture.png');
+  const lectureCoverUpload = await fetch(`${origin}/api/course-covers`, {
+    method: 'POST',
+    body: lectureCoverBody,
+    headers: { origin, cookie: teacher.cookie },
+    redirect: 'manual',
+  });
+  assert.equal(lectureCoverUpload.status, 303);
+  assert(!lectureCoverUpload.headers.get('location')?.includes('error='));
+  const lectureCoverPath = `/learn/${lessonId}/cover`;
+  assert.equal((await guest.get(lectureCoverPath)).status, 404);
+  assert.equal((await teacher.get(lectureCoverPath)).status, 200);
   assert.equal((await upload(guest, lessonId, 'lecture.pdf', pdfBytes)).status, 401);
   assert.equal((await upload(student, lessonId, 'lecture.pdf', pdfBytes)).status, 403);
   assert.equal(
@@ -295,7 +361,14 @@ try {
     assert(html.includes('class="course-card"'), `Home course cards for ${role}`);
     assert(html.includes('Басты бет'), `Home navigation for ${role}`);
     assert(!html.includes('Оқытушы болу'), `No teacher promotion for ${role}`);
+    assert(html.includes('Жабық сабақ'), `First lecture title is visible for ${role}`);
+    assert(
+      !html.includes('PRIVATE-LESSON-CONTENT'),
+      `Lesson body is not leaked into catalog for ${role}`,
+    );
   }
+  assert.equal((await guest.get(coverPath)).status, 200);
+  assert.equal((await guest.get(lectureCoverPath)).status, 200);
   assert(!(await guest.html(`/learn/${lessonId}`)).includes('PRIVATE-LESSON-CONTENT'));
   assert(!(await student.html(`/learn/${lessonId}`)).includes('PRIVATE-LESSON-CONTENT'));
   const enrollmentForm = await student.html(`/courses/${id}`);
@@ -609,9 +682,15 @@ try {
   assert.equal((await student.get(peerPath)).status, 404);
   assert(!(await student.html('/profile')).includes('ИС-24-1 жаңартылған'));
   await admin.submit('/admin/courses', { courseId: id, status: 'archived' }, 'value="archived"');
+  assert.equal((await guest.get(coverPath)).status, 404);
+  assert.equal((await guest.get(lectureCoverPath)).status, 404);
   assert(!(await student.html(`/learn/${lessonId}`)).includes('PRIVATE-LESSON-CONTENT'));
-  await admin.submit('/admin/courses', { courseId: id, status: 'draft' }, 'value="draft"');
-  await teacher.submit(editorPath, { courseId: id, title: 'Екінші бөлім' }, 'name="title"');
+  await admin.submit(
+    '/admin/courses?archive=1',
+    { courseId: id, status: 'draft' },
+    'value="draft"',
+  );
+  await teacher.submit(editorPath, { courseId: id, title: 'Екінші бөлім' }, 'Бөлім қосу');
   assert.equal(one<{ n: number }>('SELECT COUNT(*) n FROM sections WHERE course_id = ?', id)!.n, 2);
   await teacher.submit(
     `${editorPath}?lesson=${lessonId}`,

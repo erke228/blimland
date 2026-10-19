@@ -14,7 +14,7 @@ export default async function Teacher({
   const notice = await searchParams;
   if (user.role === 'student') redirect('/profile');
   const courses = all<{ id: string; title: string; status: string; category: string }>(
-    'SELECT id, title, status, category FROM courses WHERE owner_id = ? ORDER BY created_at DESC',
+    "SELECT id, title, status, category FROM courses WHERE owner_id = ? AND status != 'archived' ORDER BY created_at DESC",
     user.id,
   );
   const groups = one<{ n: number }>(

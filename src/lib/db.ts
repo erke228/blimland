@@ -47,7 +47,13 @@ export function migrate() {
   db().exec(
     'CREATE TABLE IF NOT EXISTS migrations (name TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)',
   );
-  for (const name of ['001_core', '002_university_management', '003_lesson_materials']) {
+  for (const name of [
+    '001_core',
+    '002_university_management',
+    '003_lesson_materials',
+    '004_course_editor',
+    '005_lecture_covers',
+  ]) {
     if (!one('SELECT name FROM migrations WHERE name = ?', name)) {
       transaction(() => {
         db().exec(readFileSync(resolve(`db/migrations/${name}.sql`), 'utf8'));

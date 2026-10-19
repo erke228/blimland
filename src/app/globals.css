@@ -2170,3 +2170,345 @@ a.program-lesson:hover {
     font-size: 12px;
   }
 }
+/* Course publishing and lecture editor */
+.course-cover.rose {
+  background: #f4e3e7;
+  color: #b77b8d;
+}
+.uploaded-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.cover-mini-card {
+  position: absolute;
+  left: 19%;
+  top: 19%;
+  width: 48px;
+  height: 62px;
+  border-radius: 7px;
+  background: #ffffffaa;
+  box-shadow: 0 7px 20px #142c2410;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transform: rotate(-12deg);
+}
+.cover-mini-card i {
+  width: 23px;
+  height: 3px;
+  border-radius: 3px;
+  background: currentColor;
+  opacity: 0.25;
+}
+.cover-star {
+  position: absolute;
+  top: 20%;
+  right: 22%;
+  font-size: 25px;
+  opacity: 0.6;
+}
+.cover-symbol svg {
+  width: 77px;
+  height: 77px;
+  transform: rotate(-8deg) translateX(14px);
+}
+.hero-lecture {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 15px;
+  margin-top: 22px;
+  max-width: 455px;
+  border: 1px solid #1d5b4933;
+  border-radius: 12px;
+  background: #ffffff99;
+  color: var(--ink);
+  text-decoration: none;
+}
+.hero-lecture > svg {
+  flex-shrink: 0;
+  color: #477361;
+}
+.hero-lecture span {
+  display: grid;
+  gap: 4px;
+}
+.hero-lecture b {
+  font-size: 13px;
+  line-height: 1.6;
+}
+.hero-lecture small {
+  font-size: 10px;
+  color: #64756d;
+}
+.hero-lecture:hover {
+  background: white;
+  border-color: #4d8c72;
+}
+.first-lecture-link {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 14px 0;
+  padding: 12px;
+  border-radius: 9px;
+  background: #f1f7f3;
+  color: #285542;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.6;
+}
+.first-lecture-link > svg {
+  flex-shrink: 0;
+}
+.first-lecture-link span {
+  display: grid;
+  gap: 4px;
+}
+.first-lecture-link small {
+  font-size: 8px;
+  letter-spacing: 0.8px;
+  color: #738a7b;
+}
+.editor-main {
+  display: grid;
+  gap: 24px;
+  min-width: 0;
+}
+.editor-grid {
+  align-items: start;
+  grid-template-columns: minmax(230px, 0.75fr) minmax(0, 1.7fr);
+}
+.editor-main .panel {
+  scroll-margin-top: 25px;
+}
+.editor-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+.editor-status h2 {
+  font-size: 17px;
+  margin: 0 0 8px;
+}
+.editor-status p {
+  font-size: 12px;
+  color: var(--muted);
+  max-width: 720px;
+  line-height: 1.8;
+  margin: 0;
+}
+.editor-status form {
+  flex-shrink: 0;
+}
+.editor-main h2 {
+  margin-top: 5px;
+}
+.editor-main .between {
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.editor-main .text-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+.editor-lesson.selected {
+  border-color: #7daa90;
+  background: #edf6ef;
+}
+.editor-lesson > svg {
+  flex-shrink: 0;
+}
+.editor-lesson > span {
+  flex: 1;
+}
+.section-settings {
+  margin: 8px 0 13px;
+}
+.section-settings > summary {
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+.section-settings .compact-form {
+  margin: 12px 0;
+}
+.editor-structure .publish-form {
+  margin-top: 22px;
+}
+.cover-current {
+  width: min(100%, 430px);
+  margin: 22px 0;
+}
+.cover-current > span {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 8px;
+}
+.cover-upload {
+  padding: 18px;
+  background: #f7f9f6;
+  border: 1px dashed #cddbd0;
+  border-radius: 12px;
+  margin-bottom: 25px;
+}
+.cover-picker {
+  padding: 0;
+  border: 0;
+  margin: 0;
+  min-width: 0;
+}
+.cover-picker legend {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+.cover-options {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.cover-option {
+  position: relative;
+  display: flex !important;
+  flex-direction: column;
+  border: 2px solid transparent;
+  background: #f7f8f5;
+  border-radius: 10px;
+  padding: 5px;
+  cursor: pointer;
+  min-width: 0;
+  gap: 8px !important;
+}
+.cover-option.selected {
+  border-color: #42765b;
+  background: #edf5ee;
+}
+.cover-option input {
+  position: absolute;
+  top: 11px;
+  left: 11px;
+  z-index: 2;
+  width: 15px !important;
+  height: 15px;
+  padding: 0;
+  accent-color: #42765b;
+}
+.cover-option:focus-within {
+  outline: 2px solid #42765b;
+  outline-offset: 3px;
+}
+.cover-option .course-cover {
+  height: 90px;
+  width: 100%;
+}
+.cover-option .cover-symbol svg {
+  width: 40px;
+  height: 40px;
+  transform: translateX(5px) rotate(-8deg);
+}
+.cover-option .cover-mini-card {
+  width: 25px;
+  height: 35px;
+  left: 12%;
+  top: 35%;
+  gap: 3px;
+}
+.cover-option .cover-mini-card svg {
+  width: 13px;
+  height: 13px;
+}
+.cover-option .cover-mini-card i {
+  width: 13px;
+  height: 2px;
+}
+.cover-option .cover-caption,
+.cover-option .cover-star {
+  display: none;
+}
+.cover-option > span {
+  font-size: 10px;
+  line-height: 1.5;
+  text-align: center;
+  min-height: 30px;
+}
+.lecture-header-cover {
+  margin: 20px 0;
+  max-width: 100%;
+}
+.lecture-header-cover .course-cover.large {
+  height: 180px;
+}
+.lecture-summary {
+  font-size: 16px;
+  line-height: 1.9;
+  color: var(--muted);
+}
+.lecture-objectives {
+  margin-bottom: 24px;
+}
+.lecture-objectives h2 {
+  font-size: 17px;
+}
+.lecture-objectives li {
+  font-size: 14px;
+  line-height: 1.8;
+  margin: 5px 0;
+}
+.lesson-edit-link {
+  display: inline-block;
+  margin: 0 0 12px;
+  font-size: 12px;
+}
+.lesson-readonly {
+  padding: 20px 0;
+}
+@media (max-width: 1100px) {
+  .cover-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 800px) {
+  .editor-grid {
+    grid-template-columns: 1fr;
+  }
+  .editor-status {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .hero-lecture {
+    max-width: 100%;
+  }
+}
+@media (max-width: 480px) {
+  .editor-main .panel {
+    padding: 18px;
+  }
+  .cover-options {
+    gap: 8px;
+  }
+  .lecture-header-cover .course-cover.large {
+    height: 130px;
+  }
+}
+.lecture-cover-settings > summary {
+  cursor: pointer;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.lecture-cover-settings[open] > summary {
+  margin-bottom: 18px;
+}
+.lecture-cover-settings {
+  scroll-margin-top: 30px;
+}

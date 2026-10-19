@@ -5,11 +5,12 @@ import { currentUser } from '@/lib/auth';
 import { one } from '@/lib/db';
 import { courseLessons, getCourse, type Lesson } from '@/lib/courses';
 import { completeLesson } from '@/app/actions';
-import { Notice } from '@/components/ui';
+import { CourseCover, Notice } from '@/components/ui';
 import { SubmitButton } from '@/components/submit-button';
 import { VideoPlayer } from '@/components/video-player';
 import { listMaterials } from '@/lib/materials';
 import { DocumentMaterials } from '@/components/document-materials';
+import { lectureCoverPresentation } from '@/lib/course-covers';
 export default async function Learn({
   params,
   searchParams,
@@ -19,7 +20,7 @@ export default async function Learn({
 }) {
   const { id } = await params;
   const lesson = one<Lesson>(
-    'SELECT l.*, s.course_id, s.title AS section_title FROM lessons l JOIN sections s ON s.id = l.section_id WHERE l.id = ?',
+    "SELECT l.*, s.course_id, s.title AS section_title, COALESCE(d.summary,'') summary, COALESCE(d.objectives,'') objectives FROM lessons l JOIN sections s ON s.id = l.section_id LEFT JOIN lesson_details d ON d.lesson_id=l.id WHERE l.id = ?",
     id,
   );
   if (!lesson) notFound();
@@ -73,7 +74,32 @@ export default async function Learn({
           </span>
           <h1 className="detail-title">{lesson.title}</h1>
           <p className="lesson-teacher">Оқытушы: {course.teacher}</p>
+          {owner && (
+            <Link
+              className="text-link lesson-edit-link"
+              href={`/teacher/courses/${course.id}?lesson=${id}#lesson-editor`}
+            >
+              Дәрісті өңдеу →
+            </Link>
+          )}
           <Notice {...await searchParams} />
+          <div className="lecture-header-cover">
+            <CourseCover course={{ ...course, ...lectureCoverPresentation(id) }} large />
+          </div>
+          {lesson.summary && <p className="lecture-summary">{lesson.summary}</p>}
+          {lesson.objectives && (
+            <section className="panel lecture-objectives">
+              <h2>Оқу мақсаттары</h2>
+              <ul>
+                {lesson.objectives
+                  .split('\n')
+                  .filter(Boolean)
+                  .map((goal, i) => (
+                    <li key={i}>{goal}</li>
+                  ))}
+              </ul>
+            </section>
+          )}
           {lesson.video_url && <VideoPlayer src={lesson.video_url} />}
           <DocumentMaterials materials={materials} />
           {materials.length ? (

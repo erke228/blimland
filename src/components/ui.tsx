@@ -1,43 +1,29 @@
 import Link from 'next/link';
-import {
-  ArrowUpRight,
-  BookOpen,
-  Clock3,
-  GraduationCap,
-  Sigma,
-  Languages,
-  Monitor,
-  Sparkles,
-} from 'lucide-react';
+import { ArrowUpRight, BookOpen } from 'lucide-react';
 import type { Course } from '@/lib/courses';
 import { money } from '@/lib/courses';
+import { CoverIllustration } from './cover-illustration';
 
 export function CourseCover({
   course,
   large = false,
 }: {
-  course: Pick<Course, 'category' | 'accent' | 'title'>;
+  course: Pick<Course, 'category' | 'accent' | 'title'> &
+    Partial<Pick<Course, 'id' | 'has_cover' | 'cover_version' | 'cover_preset'>> & {
+      cover_url?: string;
+    };
   large?: boolean;
 }) {
-  const Icon =
-    course.category === 'Математика'
-      ? Sigma
-      : course.category === 'Тілдер'
-        ? Languages
-        : course.category === 'Технология'
-          ? Monitor
-          : GraduationCap;
-  return (
-    <div className={`course-cover ${course.accent} ${large ? 'large' : ''}`} aria-hidden="true">
-      <span className="cover-grid" />
-      <span className="cover-symbol">
-        <Icon strokeWidth={1.3} />
-      </span>
-      <span className="cover-caption">BILIM / {course.category.toLocaleUpperCase('kk-KZ')}</span>
-      <span className="cover-orbit orbit-one" />
-      <span className="cover-orbit orbit-two" />
-    </div>
-  );
+  if (course.has_cover && course.id)
+    return (
+      <div className={`course-cover uploaded-cover ${large ? 'large' : ''}`}>
+        <img
+          src={`${course.cover_url || `/courses/${course.id}/cover`}?v=${course.cover_version}`}
+          alt={`${course.title} — мұқаба`}
+        />
+      </div>
+    );
+  return <CoverIllustration preset={course.cover_preset} large={large} />;
 }
 export function CourseCard({ course, progress }: { course: Course; progress?: number }) {
   return (
@@ -54,6 +40,23 @@ export function CourseCard({ course, progress }: { course: Course; progress?: nu
           <Link href={`/courses/${course.id}`}>{course.title}</Link>
         </h3>
         <p className="course-description">{course.description}</p>
+        {course.first_lesson_id && (
+          <Link
+            className="first-lecture-link"
+            href={
+              course.first_lesson_preview
+                ? `/learn/${course.first_lesson_id}`
+                : `/courses/${course.id}`
+            }
+          >
+            <BookOpen size={17} />
+            <span>
+              <small>АЛҒАШҚЫ ДӘРІС</small>
+              {course.first_lesson_title}
+            </span>
+            <ArrowUpRight size={17} />
+          </Link>
+        )}
         <div className="teacher-line">
           <span className="tiny-avatar">{course.teacher[0]}</span>
           {course.teacher}
@@ -141,6 +144,11 @@ export function Notice({ error, success }: { error?: string; success?: string })
     courseform: 'Атау (5–140 таңба), сипаттама (30–5000 таңба), санат және дұрыс баға қажет.',
     lessonform: 'Сабақтың атауын, мәтінін немесе HTTPS бейнесілтемесін және ұзақтығын тексеріңіз.',
     emptycourse: 'Тексеруге жібермес бұрын кемінде бір сабақ қосыңыз.',
+    emptylesson:
+      'Әр дәріске мәтін, бейнесілтеме немесе PDF/Word құжатын қосыңыз. Бос дәрістер жарияланбайды.',
+    coversize: 'Мұқаба файлы бос болмауы және 5 МБ-тан аспауы тиіс.',
+    coverinvalid:
+      'JPG, PNG немесе WebP суретін таңдаңыз (20 мегапиксельге дейін). Файл ашылуы тиіс.',
     readonly: 'Бұл нұсқа өңдеуге жабық. Курс тексерілуде немесе жарияланған.',
     documenttype:
       'PDF немесе Word (.docx) файлын таңдаңыз. .doc файлын алдымен .docx не PDF ретінде сақтаңыз.',
