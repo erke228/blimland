@@ -3,6 +3,7 @@ node_modules/
 out/
 data/
 uploads/
+public/document-runtime/
 .env
 .env.*
 !.env.example

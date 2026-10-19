@@ -6,7 +6,6 @@ import {
   LayoutDashboard,
   GraduationCap,
   ShieldCheck,
-  ArrowUpRight,
   Compass,
   Menu,
   X,
@@ -78,7 +77,7 @@ export function Navigation({
             href: '/profile',
             label: 'Менің профилім',
             icon: UserRound,
-            active: pathname === '/profile',
+            active: pathname.startsWith('/profile'),
           },
         ]
       : [
@@ -105,12 +104,6 @@ export function Navigation({
                   icon: LayoutDashboard,
                   active: pathname === '/dashboard',
                 },
-                {
-                  href: '/groups',
-                  label: 'Менің топтарым',
-                  icon: Users,
-                  active: pathname === '/groups',
-                },
               ]),
           {
             href: '/courses',
@@ -123,7 +116,7 @@ export function Navigation({
             href: '/profile',
             label: 'Менің профилім',
             icon: UserRound,
-            active: pathname === '/profile',
+            active: pathname.startsWith('/profile'),
           },
         ];
   return (

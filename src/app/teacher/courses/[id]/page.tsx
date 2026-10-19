@@ -7,6 +7,7 @@ import { courseLessons, getCourse } from '@/lib/courses';
 import { addSection, saveLesson, submitCourse } from '@/app/actions';
 import { Notice, PageHeading, statusLabel } from '@/components/ui';
 import { SubmitButton } from '@/components/submit-button';
+import { MaterialEditor } from '@/components/material-editor';
 export default async function CourseEditor({
   params,
   searchParams,
@@ -169,6 +170,13 @@ export default async function CourseEditor({
               </label>
               <SubmitButton>{editing ? 'Өзгерістерді сақтау' : 'Сабақты сақтау'}</SubmitButton>
             </form>
+            {editing ? (
+              <MaterialEditor lessonId={editing.id} userId={user.id} />
+            ) : (
+              <p className="help-text spaced">
+                PDF немесе Word қосу үшін сабақты сақтап, оны курс құрылымынан таңдаңыз.
+              </p>
+            )}
           </div>
         )}
       </div>

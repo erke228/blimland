@@ -8,6 +8,8 @@ import { completeLesson } from '@/app/actions';
 import { Notice } from '@/components/ui';
 import { SubmitButton } from '@/components/submit-button';
 import { VideoPlayer } from '@/components/video-player';
+import { listMaterials } from '@/lib/materials';
+import { DocumentMaterials } from '@/components/document-materials';
 export default async function Learn({
   params,
   searchParams,
@@ -53,6 +55,11 @@ export default async function Learn({
       user.id,
       id,
     );
+  const materials = listMaterials(id, user?.id);
+  const body = lesson.body
+    .split('\n\n')
+    .filter(Boolean)
+    .map((paragraph, i) => <p key={i}>{paragraph}</p>);
   return (
     <>
       <Link className="back-link" href={`/courses/${course.id}`}>
@@ -65,16 +72,18 @@ export default async function Learn({
             {lesson.section_title} · {index + 1}/{lessons.length} САБАҚ
           </span>
           <h1 className="detail-title">{lesson.title}</h1>
+          <p className="lesson-teacher">Оқытушы: {course.teacher}</p>
           <Notice {...await searchParams} />
           {lesson.video_url && <VideoPlayer src={lesson.video_url} />}
-          <div className="panel lesson-body">
-            {lesson.body
-              .split('\n\n')
-              .filter(Boolean)
-              .map((paragraph, i) => (
-                <p key={i}>{paragraph}</p>
-              ))}
-          </div>
+          <DocumentMaterials materials={materials} />
+          {materials.length ? (
+            <details className="panel lesson-overview">
+              <summary>Дәріс туралы</summary>
+              <div className="lesson-body">{body}</div>
+            </details>
+          ) : (
+            <div className="panel lesson-body">{body}</div>
+          )}
           <div className="lesson-actions">
             {enrolled ? (
               done ? (

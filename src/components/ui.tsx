@@ -142,6 +142,12 @@ export function Notice({ error, success }: { error?: string; success?: string })
     lessonform: 'Сабақтың атауын, мәтінін немесе HTTPS бейнесілтемесін және ұзақтығын тексеріңіз.',
     emptycourse: 'Тексеруге жібермес бұрын кемінде бір сабақ қосыңыз.',
     readonly: 'Бұл нұсқа өңдеуге жабық. Курс тексерілуде немесе жарияланған.',
+    documenttype:
+      'PDF немесе Word (.docx) файлын таңдаңыз. .doc файлын алдымен .docx не PDF ретінде сақтаңыз.',
+    documentsize: 'Құжат бос болмауы және 20 МБ-тан аспауы тиіс.',
+    documentinvalid:
+      'Құжат ашылмады: файл бүлінген, шифрланған немесе пішімі қолдау таппайды. PDF не DOCX нұсқасын тексеріңіз.',
+    documentquota: 'Материалдар лимиті: бір сабаққа 10 құжат, бір жүктеушіге жалпы 500 МБ.',
     payment: 'Төлем әлі қосылмаған. Қазір ақылы курсқа қолжетімділік сатылмайды.',
     course: 'Курс қолжетімсіз.',
     registrationclosed: 'Ашық тіркелу уақытша жабық. Университет әкімшісіне хабарласыңыз.',
@@ -156,6 +162,7 @@ export function Notice({ error, success }: { error?: string; success?: string })
   };
   const successes: Record<string, string> = {
     saved: 'Өзгерістер сақталды.',
+    documentuploaded: 'Құжат жүктелді. Ол сабақ ішінде ашылады.',
     application: 'Өтінім әкімшіге жіберілді.',
     completed: 'Сабақ оқылған ретінде белгіленді.',
     invitecreated:

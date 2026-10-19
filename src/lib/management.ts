@@ -71,14 +71,8 @@ const groupSelect = `SELECT g.*, u.name teacher,
   (SELECT COUNT(*) FROM group_members m WHERE m.group_id = g.id) member_count,
   (SELECT COUNT(*) FROM group_courses c WHERE c.group_id = g.id) course_count
   FROM academic_groups g JOIN users u ON u.id = g.owner_id`;
-export function listGroups(actorId: string, mode: 'managed' | 'member' = 'managed') {
-  const user = actor(actorId);
-  if (mode === 'member')
-    return all<Group>(
-      `${groupSelect} JOIN group_members m ON m.group_id = g.id WHERE m.user_id = ? ORDER BY g.created_at DESC`,
-      user.id,
-    );
-  actor(actorId, ['teacher', 'admin']);
+export function listGroups(actorId: string) {
+  const user = actor(actorId, ['teacher', 'admin']);
   return user.role === 'admin'
     ? all<Group>(`${groupSelect} ORDER BY g.created_at DESC`)
     : all<Group>(`${groupSelect} WHERE g.owner_id = ? ORDER BY g.created_at DESC`, user.id);
@@ -265,14 +259,11 @@ export function acceptInvitation(actorId: string, token: string) {
     return invite.group_id;
   });
 }
-export function removeMember(actorId: string, groupId: string, userId: string, self = false) {
-  if (self) {
-    actor(actorId);
-    if (actorId !== userId) throw new ManagementError('forbidden');
-  } else managedGroup(actorId, groupId);
+export function removeMember(actorId: string, groupId: string, userId: string) {
+  managedGroup(actorId, groupId);
   transaction(() => {
     run('DELETE FROM group_members WHERE group_id = ? AND user_id = ?', groupId, userId);
-    recordAudit(actorId, self ? 'group.left' : 'group.member_removed', groupId);
+    recordAudit(actorId, 'group.member_removed', groupId);
   });
 }
 export function groupReport(actorId: string, groupId: string) {

@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { BookOpen, CheckCircle2, GraduationCap, ArrowUpRight } from 'lucide-react';
+import { BookOpen, CheckCircle2, ArrowUpRight } from 'lucide-react';
 import { requireUser } from '@/lib/auth';
 import { all, one } from '@/lib/db';
 import { getCourse, type Course } from '@/lib/courses';
@@ -45,7 +45,7 @@ export default async function Dashboard({
         </Link>
       </PageHeading>
       <Notice error={error} />
-      <div className="stats-grid">
+      <div className="stats-grid learning-stats">
         <div className="stat-card">
           <BookOpen />
           <span>Менің курстарым</span>
@@ -55,24 +55,6 @@ export default async function Dashboard({
           <CheckCircle2 />
           <span>Оқылған сабақтар</span>
           <strong>{complete}</strong>
-        </div>
-        <div className="stat-card">
-          <GraduationCap />
-          <span>Аккаунт түрі</span>
-          <strong className="stat-label">
-            {user.role === 'admin' ? 'Бас әкімші' : user.role === 'teacher' ? 'Оқытушы' : 'Студент'}
-          </strong>
-        </div>
-      </div>
-      <div className="section-title">
-        <div className="student-group-banner">
-          <div>
-            <strong>Оқытушыңыздың тобына қосылыңыз</strong>
-            <p>Шақыру сілтемесімен қосылған топтар мен тағайындалған пәндер.</p>
-          </div>
-          <Link className="button outline" href="/groups">
-            Менің топтарым →
-          </Link>
         </div>
       </div>
       <div className="section-title">
@@ -95,23 +77,6 @@ export default async function Dashboard({
           label="Курстарды көру"
         />
       )}
-      <div className="panel profile-panel">
-        <h2>Профиль</h2>
-        <dl>
-          <div>
-            <dt>Аты-жөні</dt>
-            <dd>{user.name}</dd>
-          </div>
-          <div>
-            <dt>Email</dt>
-            <dd>{user.email}</dd>
-          </div>
-          <div>
-            <dt>Оқу тілі</dt>
-            <dd>Қазақ тілі</dd>
-          </div>
-        </dl>
-      </div>
     </>
   );
 }

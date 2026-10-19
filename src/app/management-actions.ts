@@ -94,15 +94,15 @@ export async function acceptInviteAction(form: FormData) {
     acceptInvitation(user.id, token),
   );
   revalidatePath('/dashboard');
-  redirect('/groups?success=joined');
+  revalidatePath('/profile');
+  redirect('/profile?success=joined#study-groups');
 }
 export async function removeMemberAction(form: FormData) {
-  const user = await requireUser();
+  const user = await requireRole('teacher', 'admin');
   const id = v(form, 'groupId');
-  const self = form.get('self') === 'yes';
-  const path = self ? '/groups' : `/teacher/groups/${id}`;
-  perform(path, () => removeMember(user.id, id, v(form, 'userId'), self));
-  revalidatePath('/groups');
+  const path = `/teacher/groups/${id}`;
+  perform(path, () => removeMember(user.id, id, v(form, 'userId')));
+  revalidatePath('/profile');
   redirect(`${path}?success=removed`);
 }
 export async function updateUserAction(form: FormData) {

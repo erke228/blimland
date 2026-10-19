@@ -28,8 +28,8 @@ export default async function Join({
           Сілтеменің мерзімі аяқталған, лимиті біткен немесе оқытушы оны өшірген. Жаңа сілтеме
           сұраңыз.
         </p>
-        <Link className="button outline" href="/groups">
-          Менің топтарым
+        <Link className="button outline" href="/profile#study-groups">
+          Менің профилім
         </Link>
       </div>
     );
@@ -59,7 +59,7 @@ export default async function Join({
         <p>{invite.department}</p>
         <p className="muted">
           Қосылғаннан кейін оқытушы атыңызды, email мекенжайыңызды және топқа тағайындалған
-          курстардағы оқу барысыңызды көреді.
+          курстардағы оқу барысыңызды көреді. Топтастарға тек атыңыз бен рөліңіз көрінеді.
         </p>
         {courses.length > 0 && (
           <>
@@ -72,7 +72,7 @@ export default async function Join({
           </>
         )}
         {member ? (
-          <Link className="button primary" href="/groups">
+          <Link className="button primary" href="/profile#study-groups">
             Сіз бұл топқа қосылғансыз →
           </Link>
         ) : !user ? (

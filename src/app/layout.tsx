@@ -12,6 +12,8 @@ import '@fontsource/noto-sans/700.css';
 import '@fontsource/noto-sans/800.css';
 import './globals.css';
 import './management.css';
+import './profile.css';
+import './documents.css';
 
 export async function generateMetadata(): Promise<Metadata> {
   const site = settings();

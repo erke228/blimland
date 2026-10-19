@@ -7,9 +7,11 @@ import { createServer } from 'node:net';
 import { setTimeout as delay } from 'node:timers/promises';
 import { migrate, one, run } from '../src/lib/db';
 import { hashPassword } from '../src/lib/security';
+import { pdfFixture, docxFixture } from '../tests/document-fixtures';
 
 mkdirSync('.test-data', { recursive: true });
 process.env.DATABASE_PATH = resolve('.test-data', `${randomUUID()}.sqlite`);
+process.env.UPLOAD_DIR = resolve('.test-data', `http-materials-${randomUUID()}`);
 migrate();
 const adminEmail = 'admin@integration.invalid';
 const password = 'Integration-only-password-123';
@@ -93,6 +95,24 @@ class Browser {
     assert.equal(response.status, 303, `Action failed at ${path}: ${response.status}`);
     return response.headers.get('location')!;
   }
+}
+
+async function upload(
+  browser: Browser,
+  lessonId: string,
+  filename: string,
+  bytes: Buffer,
+  requestOrigin = origin,
+) {
+  const body = new FormData();
+  body.set('lessonId', lessonId);
+  body.set('file', new Blob([new Uint8Array(bytes)]), filename);
+  return fetch(`${origin}/api/lesson-materials`, {
+    method: 'POST',
+    body,
+    redirect: 'manual',
+    headers: { origin: requestOrigin, ...(browser.cookie ? { cookie: browser.cookie } : {}) },
+  });
 }
 
 try {
@@ -210,16 +230,86 @@ try {
     'name="lessonId"',
   );
   assert(!(await guest.html(`/courses/${id}`)).includes('Интеграциялық курс'));
-  await teacher.submit(editorPath, { courseId: id }, 'Тексеруге жіберу');
-  await admin.submit('/admin', { courseId: id, decision: 'published' }, 'value="published"');
   const lessonId = one<{ id: string }>(
     'SELECT id FROM lessons WHERE section_id = ?',
     sectionId,
   )!.id;
+  const pdfBytes = await pdfFixture();
+  assert.equal((await upload(guest, lessonId, 'lecture.pdf', pdfBytes)).status, 401);
+  assert.equal((await upload(student, lessonId, 'lecture.pdf', pdfBytes)).status, 403);
+  assert.equal(
+    (await upload(teacher, lessonId, 'lecture.pdf', pdfBytes, 'https://foreign.invalid')).status,
+    403,
+  );
+  assert.equal((await upload(teacher, lessonId, 'Қазақша дәріс.pdf', pdfBytes)).status, 303);
+  const pdfId = one<{ id: string }>(
+    "SELECT id FROM lesson_materials WHERE lesson_id = ? AND kind = 'pdf'",
+    lessonId,
+  )!.id;
+  const wordUpload = await upload(teacher, lessonId, 'Word дәрісі.docx', await docxFixture(true));
+  assert.equal(wordUpload.status, 303);
+  assert(
+    !wordUpload.headers.get('location')?.includes('error='),
+    `Word upload failed: ${wordUpload.headers.get('location')}. ${logs}`,
+  );
+  const wordId = one<{ id: string }>(
+    "SELECT id FROM lesson_materials WHERE lesson_id = ? AND kind = 'docx'",
+    lessonId,
+  )!.id;
+  const filePath = `/materials/${pdfId}/file`;
+  const wordPath = `/materials/${wordId}/preview`;
+  assert.equal((await student.get(filePath)).status, 404);
+  assert.equal((await guest.get(wordPath)).status, 404);
+  const wordPreview = await teacher.get(wordPath);
+  assert.equal(wordPreview.status, 200);
+  assert.equal(wordPreview.headers.get('x-frame-options'), 'SAMEORIGIN');
+  assert(wordPreview.headers.get('content-security-policy')?.includes("default-src 'none'"));
+  assert((await wordPreview.text()).includes('Ә Ғ Қ Ң Ө Ұ Ү Һ І'));
+  assert(!(await teacher.html(wordPath)).includes('javascript:'));
+  const materialEditor = await teacher.html(`${editorPath}?lesson=${lessonId}`);
+  assert(materialEditor.includes('multipart/form-data'));
+  await teacher.submit(
+    `${editorPath}?lesson=${lessonId}`,
+    { materialId: pdfId },
+    'name="materialId"',
+  );
+  assert.equal((await teacher.get(filePath)).status, 404);
+  await teacher.submit(
+    `${editorPath}?lesson=${lessonId}`,
+    { materialId: pdfId, restore: 'yes' },
+    'value="yes"',
+  );
+  assert.equal((await teacher.get(filePath)).status, 200);
+  await teacher.submit(editorPath, { courseId: id }, 'Тексеруге жіберу');
+  await admin.submit('/admin', { courseId: id, decision: 'published' }, 'value="published"');
   assert(!(await guest.html(`/learn/${lessonId}`)).includes('PRIVATE-LESSON-CONTENT'));
   assert(!(await student.html(`/learn/${lessonId}`)).includes('PRIVATE-LESSON-CONTENT'));
   const enrollmentForm = await student.html(`/courses/${id}`);
   await student.submit(`/courses/${id}`, { courseId: id }, 'name="courseId"', enrollmentForm);
+  assert.equal((await student.get(`/learn/${lessonId}`)).status, 200);
+  const enrolledFile = await student.get(filePath);
+  assert.equal(enrolledFile.status, 200);
+  assert.equal(enrolledFile.headers.get('content-type'), 'application/pdf');
+  assert.equal(enrolledFile.headers.get('cache-control'), 'private, no-store');
+  assert(Buffer.from(await enrolledFile.arrayBuffer()).equals(pdfBytes));
+  const ranged = await fetch(`${origin}${filePath}`, {
+    headers: { cookie: student.cookie, range: 'bytes=0-9' },
+  });
+  assert.equal(ranged.status, 206);
+  assert.equal((await ranged.arrayBuffer()).byteLength, 10);
+  assert.equal(
+    (
+      await fetch(`${origin}${filePath}`, {
+        headers: { cookie: student.cookie, range: 'bytes=9999999-' },
+      })
+    ).status,
+    416,
+  );
+  assert.equal((await student.get(wordPath)).status, 200);
+  run('UPDATE lessons SET is_preview = 1 WHERE id = ?', lessonId);
+  assert.equal((await guest.get(filePath)).status, 200);
+  run('UPDATE lessons SET is_preview = 0 WHERE id = ?', lessonId);
+  assert.equal((await guest.get(filePath)).status, 404);
   assert((await student.html(`/learn/${lessonId}`)).includes('PRIVATE-LESSON-CONTENT'));
   await student.submit(`/learn/${lessonId}`, { lessonId }, 'name="lessonId"');
   assert.match(await student.html('/dashboard'), /<progress[^>]*value="100"/);
@@ -281,8 +371,57 @@ try {
   const inviteHtml = await guest.html(`/join/${token}`);
   assert(inviteHtml.includes('ИС-24-1'));
   assert(!inviteHtml.includes('student@integration.invalid'));
-  await student.submit(`/join/${token}`, { token }, 'name="token"');
-  assert((await student.html('/groups')).includes('ИС-24-1'));
+  assert.equal(
+    await student.submit(`/join/${token}`, { token }, 'name="token"'),
+    '/profile?success=joined#study-groups',
+  );
+  assert.equal((await student.get('/groups')).headers.get('location'), '/profile#study-groups');
+  const classmate = new Browser();
+  await classmate.submit(
+    '/register',
+    { name: 'Әсем Қанатқызы', email: 'peer-private@integration.invalid', password },
+    'name="password"',
+  );
+  await classmate.submit(`/join/${token}`, { token }, 'name="token"');
+  const peerRow = one<{ id: string }>(
+    'SELECT id FROM users WHERE email = ?',
+    'peer-private@integration.invalid',
+  )!;
+  run(
+    'UPDATE users SET department = ?, academic_title = ? WHERE id = ?',
+    'PRIVATE-PEER-DEPARTMENT',
+    'PRIVATE-PEER-TITLE',
+    peerRow.id,
+  );
+  const profile = await student.html('/profile');
+  assert(profile.includes('ИС-24-1'));
+  assert(profile.includes('Әсем Қанатқызы'));
+  assert(profile.includes(`/profile/people/${peerRow.id}`));
+  for (const hidden of [
+    'peer-private@integration.invalid',
+    'PRIVATE-PEER',
+    'href="/groups"',
+    'href="/teacher/groups',
+    'name="groupId"',
+    'name="maxUses"',
+    '/export',
+  ])
+    assert(!profile.includes(hidden), `Student profile leaked ${hidden}`);
+  const peerPath = `/profile/people/${peerRow.id}`;
+  const peerHtml = await student.html(peerPath);
+  assert(peerHtml.includes('Әсем Қанатқызы'));
+  for (const hidden of ['peer-private@integration.invalid', 'PRIVATE-PEER', 'name="academicTitle"'])
+    assert(!peerHtml.includes(hidden), `Minimal profile leaked ${hidden}`);
+  assert.equal((await guest.get(peerPath)).status, 307);
+  const outsider = new Browser();
+  await outsider.submit(
+    '/register',
+    { name: 'Бөтен студент', email: 'outsider@integration.invalid', password },
+    'name="password"',
+  );
+  assert.equal((await outsider.get(peerPath)).status, 404);
+  assert.equal((await student.get('/profile/people/missing')).status, 404);
+  assert.equal((await student.get(`/teacher/groups/${groupId}`)).status, 307);
   const report = await teacher.html(groupPath);
   assert(report.includes('student@integration.invalid'));
   assert.match(report, /<progress[^>]*value="1"[^>]*max="1"/);
@@ -429,7 +568,20 @@ try {
       .semester,
     2,
   );
-  await student.submit('/groups', { groupId, userId: studentRow.id, self: 'yes' }, 'name="self"');
+  await student.submit(
+    groupPath,
+    { groupId, userId: studentRow.id, self: 'yes' },
+    'name="userId"',
+    report,
+  );
+  assert(
+    one(
+      'SELECT user_id FROM group_members WHERE group_id = ? AND user_id = ?',
+      groupId,
+      studentRow.id,
+    ),
+  );
+  await teacher.submit(groupPath, { groupId, userId: studentRow.id }, 'name="userId"');
   assert(
     !one(
       'SELECT user_id FROM group_members WHERE group_id = ? AND user_id = ?',
@@ -440,6 +592,8 @@ try {
   assert(
     one('SELECT user_id FROM enrollments WHERE user_id = ? AND course_id = ?', studentRow.id, id),
   );
+  assert.equal((await student.get(peerPath)).status, 404);
+  assert(!(await student.html('/profile')).includes('ИС-24-1 жаңартылған'));
   await admin.submit('/admin/courses', { courseId: id, status: 'archived' }, 'value="archived"');
   assert(!(await student.html(`/learn/${lessonId}`)).includes('PRIVATE-LESSON-CONTENT'));
   await admin.submit('/admin/courses', { courseId: id, status: 'draft' }, 'value="draft"');
@@ -514,7 +668,7 @@ try {
   assert(closed.includes('registrationclosed'));
   assert(!one('SELECT id FROM users WHERE email = ?', 'closed@integration.invalid'));
   console.log(
-    'PASS: existing learning flow plus real HTTP super-admin controls, Unicode profile editing, group creation, assignment, invitation acceptance/revocation, teacher isolation, CSV privacy, archived-history preservation, blocking/session revocation, and registration settings.',
+    'PASS: learning, super-admin controls, profile-only groups and peer privacy, PDF/DOCX upload and preview, Range, document access and restoration, teacher isolation, invitations, CSV, blocking, and registration settings.',
   );
 } finally {
   server.kill();

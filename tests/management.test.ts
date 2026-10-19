@@ -172,13 +172,15 @@ test('Course assignment enrolls existing members and refuses another teacher’s
     one('SELECT user_id FROM enrollments WHERE user_id = ? AND course_id = ?', student, foreign),
   );
 });
-test('Leaving a group preserves enrollment; removing someone else as self is forbidden', () => {
+test('Only group managers can remove members; removal preserves enrollment', () => {
   const id = group();
   const c = course();
   assignCourse(teacher, id, c);
   acceptInvitation(student, newInvite(teacher, id, 7, 10));
-  assert.throws(() => removeMember(otherStudent, id, student, true), code('forbidden'));
-  removeMember(student, id, student, true);
+  assert.throws(() => removeMember(otherStudent, id, student), code('forbidden'));
+  assert.throws(() => removeMember(student, id, student), code('forbidden'));
+  assert.throws(() => removeMember(otherTeacher, id, student), code('forbidden'));
+  removeMember(teacher, id, student);
   assert(!one('SELECT user_id FROM group_members WHERE group_id = ? AND user_id = ?', id, student));
   assert(one('SELECT user_id FROM enrollments WHERE user_id = ? AND course_id = ?', student, c));
 });
