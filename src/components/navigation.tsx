@@ -13,6 +13,7 @@ import {
   Settings,
   UserRound,
   Activity,
+  House,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -109,8 +110,7 @@ export function Navigation({
             href: '/courses',
             label: 'Пәндер мен курстар',
             icon: Compass,
-            active:
-              pathname === '/' || pathname.startsWith('/courses') || pathname.startsWith('/learn'),
+            active: pathname.startsWith('/courses') || pathname.startsWith('/learn'),
           },
           {
             href: '/profile',
@@ -151,19 +151,21 @@ export function Navigation({
         </div>
         <p className="nav-caption">{role === 'admin' ? 'БАСҚАРУ ОРТАЛЫҒЫ' : 'ОҚУ КЕҢІСТІГІ'}</p>
         <nav aria-label="Негізгі мәзір">
-          {links.map(({ href, label, icon: Icon, active }) => (
-            <Link
-              key={href}
-              href={href}
-              className={`nav-link ${active ? 'active' : ''}`}
-              onClick={() => setOpen(false)}
-              aria-current={active ? 'page' : undefined}
-            >
-              <Icon size={19} />
-              {label}
-              {active && <span className="active-dot" />}
-            </Link>
-          ))}
+          {[{ href: '/', label: 'Басты бет', icon: House, active: pathname === '/' }, ...links].map(
+            ({ href, label, icon: Icon, active }) => (
+              <Link
+                key={href}
+                href={href}
+                className={`nav-link ${active ? 'active' : ''}`}
+                onClick={() => setOpen(false)}
+                aria-current={active ? 'page' : undefined}
+              >
+                <Icon size={19} />
+                {label}
+                {active && <span className="active-dot" />}
+              </Link>
+            ),
+          )}
         </nav>
         <div className="sidebar-bottom">
           <div className="sidebar-foot">

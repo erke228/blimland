@@ -282,6 +282,20 @@ try {
   assert.equal((await teacher.get(filePath)).status, 200);
   await teacher.submit(editorPath, { courseId: id }, 'Тексеруге жіберу');
   await admin.submit('/admin', { courseId: id, decision: 'published' }, 'value="published"');
+  for (const [role, browser] of [
+    ['guest', guest],
+    ['student', student],
+    ['teacher', teacher],
+    ['admin', admin],
+  ] as const) {
+    const home = await browser.get('/');
+    assert.equal(home.status, 200, `Home remains available to ${role}`);
+    const html = await home.text();
+    assert(html.includes('hero-art'), `Home illustration for ${role}`);
+    assert(html.includes('class="course-card"'), `Home course cards for ${role}`);
+    assert(html.includes('Басты бет'), `Home navigation for ${role}`);
+    assert(!html.includes('Оқытушы болу'), `No teacher promotion for ${role}`);
+  }
   assert(!(await guest.html(`/learn/${lessonId}`)).includes('PRIVATE-LESSON-CONTENT'));
   assert(!(await student.html(`/learn/${lessonId}`)).includes('PRIVATE-LESSON-CONTENT'));
   const enrollmentForm = await student.html(`/courses/${id}`);

@@ -1,7 +1,6 @@
 import Link from 'next/link';
 import {
   ArrowUpRight,
-  ArrowRight,
   Play,
   Check,
   Search,
@@ -11,9 +10,25 @@ import {
   BadgeCheck,
 } from 'lucide-react';
 import { listCourses } from '@/lib/courses';
+import { currentUser } from '@/lib/auth';
 import { CourseCard, EmptyState, PageHeading } from './ui';
 
-export function Catalog({ q = '', category = '' }: { q?: string; category?: string }) {
+export async function Catalog({ q = '', category = '' }: { q?: string; category?: string }) {
+  const user = await currentUser();
+  const startHref = !user
+    ? '/register'
+    : user.role === 'admin'
+      ? '/admin'
+      : user.role === 'teacher'
+        ? '/teacher'
+        : '/dashboard';
+  const startLabel = !user
+    ? 'Оқуды бастау'
+    : user.role === 'admin'
+      ? 'Басқару тақтасы'
+      : user.role === 'teacher'
+        ? 'Оқытушы кабинеті'
+        : 'Оқуды жалғастыру';
   const courses = listCourses(q.slice(0, 200), category.slice(0, 100));
   const categories = ['Барлығы', 'Математика', 'Тілдер', 'Технология', 'Жаратылыстану'];
   return (
@@ -37,8 +52,8 @@ export function Catalog({ q = '', category = '' }: { q?: string; category?: stri
             Түсінікті сабақтар, өз қарқыныңызбен оқу және
             <br className="desktop-break" /> алға жетелейтін жаңа білім.
           </p>
-          <Link href="/register" className="button dark">
-            Оқуды бастау <ArrowUpRight size={17} />
+          <Link href={startHref} className="button dark">
+            {startLabel} <ArrowUpRight size={17} />
           </Link>
           <div className="hero-note">
             <Check size={15} /> Тегін курстардан бастаңыз
@@ -154,9 +169,14 @@ export function Catalog({ q = '', category = '' }: { q?: string; category?: stri
             label="Барлық курс"
           />
         )}
-        <p className="demo-note">
-          Алғашқы курстар — платформаның жұмысын көрсетуге арналған үлгі материалдар.
-        </p>
+        {courses.some((course) =>
+          ['algebra-basics', 'kazakh-writing', 'digital-skills'].includes(course.id),
+        ) && (
+          <p className="demo-note">
+            «Алгебра», «Қазақ тілінде сауатты жазу» және «Цифрлық сауаттылық» — платформаны
+            тексеруге арналған үлгі курстар.
+          </p>
+        )}
       </section>
     </>
   );
