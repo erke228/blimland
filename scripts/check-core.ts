@@ -14,7 +14,7 @@ migrate();
 const adminEmail = 'admin@integration.invalid';
 const password = 'Integration-only-password-123';
 run(
-  'INSERT INTO users VALUES (?, ?, ?, ?, ?, ?)',
+  'INSERT INTO users (id, email, name, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?, ?)',
   randomUUID(),
   adminEmail,
   'Test Admin',
@@ -72,8 +72,24 @@ class Browser {
       headers: { origin, ...(this.cookie ? { cookie: this.cookie } : {}) },
       redirect: 'manual',
     });
-    const cookie = response.headers.get('set-cookie');
-    if (cookie) this.cookie = cookie.split(';')[0];
+    const jar = new Map(
+      this.cookie
+        .split('; ')
+        .filter(Boolean)
+        .map((part) => {
+          const split = part.indexOf('=');
+          return [part.slice(0, split), part.slice(split + 1)];
+        }),
+    );
+    for (const header of response.headers.getSetCookie()) {
+      const item = header.split(';')[0];
+      const split = item.indexOf('=');
+      const key = item.slice(0, split);
+      const value = item.slice(split + 1);
+      if (/max-age=0/i.test(header) || !value) jar.delete(key);
+      else jar.set(key, value);
+    }
+    this.cookie = [...jar].map(([key, value]) => `${key}=${value}`).join('; ');
     assert.equal(response.status, 303, `Action failed at ${path}: ${response.status}`);
     return response.headers.get('location')!;
   }
@@ -124,6 +140,15 @@ try {
     'student',
   );
   assert.equal((await teacher.get('/teacher/new')).status, 307);
+  assert.equal(one<{ n: number }>('SELECT COUNT(*) n FROM teacher_applications')!.n, 0);
+  assert(!(await student.html('/courses')).includes('Оқытушы болу'));
+  assert(!(await guest.html('/register')).includes('name="teacher"'));
+  await teacher.submit(
+    '/profile',
+    { bio: 'Университет кафедрасындағы тәжірибем және оқытатын пәндерім туралы өтінім.' },
+    'name="bio"',
+  );
+  assert((await teacher.html('/profile')).includes('Өтінім бас әкімшінің қарауында'));
   await admin.submit('/login', { email: adminEmail, password }, 'name="password"');
   const pending = await admin.html('/admin');
   const application = one<{ id: string }>(
@@ -235,8 +260,261 @@ try {
     )!.n,
     0,
   );
+  run('UPDATE courses SET price_kzt = 0 WHERE id = ?', id);
+  const createdGroup = await teacher.submit(
+    '/teacher/groups/new',
+    {
+      name: 'ИС-24-1',
+      department: 'Қазақша кафедра',
+      academicYear: '2026–2027',
+      semester: '1',
+      description: 'HTTP топ тексеруі',
+    },
+    'name="academicYear"',
+  );
+  const groupId = new URL(createdGroup, origin).pathname.split('/').pop()!;
+  const groupPath = `/teacher/groups/${groupId}`;
+  await teacher.submit(groupPath, { groupId, courseId: id }, 'name="courseId"');
+  await teacher.submit(groupPath, { groupId, days: '7', maxUses: '3' }, 'name="maxUses"');
+  const token = teacher.cookie.match(new RegExp(`group_invite_${groupId}=([a-f0-9]{48})`))?.[1];
+  assert(token, 'Generated invitation not found in the owner-only cookie');
+  const inviteHtml = await guest.html(`/join/${token}`);
+  assert(inviteHtml.includes('ИС-24-1'));
+  assert(!inviteHtml.includes('student@integration.invalid'));
+  await student.submit(`/join/${token}`, { token }, 'name="token"');
+  assert((await student.html('/groups')).includes('ИС-24-1'));
+  const report = await teacher.html(groupPath);
+  assert(report.includes('student@integration.invalid'));
+  assert.match(report, /<progress[^>]*value="1"[^>]*max="1"/);
+  assert.equal((await teacher.get(`${groupPath}/export`)).status, 200);
+  assert.equal((await student.get(`${groupPath}/export`)).status, 403);
+  assert.equal((await guest.get(`${groupPath}/export`)).status, 401);
+  assert(
+    (await (await teacher.get(`${groupPath}/export`)).text()).includes(
+      'student@integration.invalid',
+    ),
+  );
+  await student.submit(
+    '/profile',
+    {
+      name: 'Қазақша студент',
+      department: 'Ғылым кафедрасы',
+      academicTitle: 'Студент',
+      role: 'admin',
+    },
+    'name="academicTitle"',
+  );
+  const studentRow = one<{ id: string; role: string }>(
+    'SELECT id, role FROM users WHERE email = ?',
+    'student@integration.invalid',
+  )!;
+  assert.equal(studentRow.role, 'student');
+  const otherRow = one<{ id: string }>(
+    'SELECT id FROM users WHERE email = ?',
+    'other@integration.invalid',
+  )!;
+  const otherPath = `/admin/users/${otherRow.id}`;
+  const userForm = await admin.html(otherPath);
+  await student.submit(
+    otherPath,
+    {
+      userId: otherRow.id,
+      name: 'Басқа оқытушы',
+      email: 'other@integration.invalid',
+      role: 'teacher',
+      status: 'active',
+      department: '',
+      academicTitle: '',
+    },
+    'name="role"',
+    userForm,
+  );
+  assert.equal(
+    one<{ role: string }>('SELECT role FROM users WHERE id = ?', otherRow.id)!.role,
+    'student',
+  );
+  await admin.submit(
+    otherPath,
+    {
+      userId: otherRow.id,
+      name: 'Басқа оқытушы',
+      email: 'other@integration.invalid',
+      role: 'teacher',
+      status: 'active',
+      department: '',
+      academicTitle: '',
+    },
+    'name="role"',
+  );
+  await stranger.submit(
+    '/login',
+    { email: 'other@integration.invalid', password },
+    'name="password"',
+  );
+  assert.equal((await stranger.get(groupPath)).status, 404);
+  assert.equal((await stranger.get(`${groupPath}/export`)).status, 403);
+  await stranger.submit(groupPath, { groupId, days: '7', maxUses: '5' }, 'name="maxUses"', report);
+  assert.equal(
+    one<{ n: number }>('SELECT COUNT(*) n FROM group_invites WHERE group_id = ?', groupId)!.n,
+    1,
+  );
+  const inviteId = one<{ id: string }>(
+    'SELECT id FROM group_invites WHERE group_id = ?',
+    groupId,
+  )!.id;
+  await teacher.submit(groupPath, { groupId, inviteId }, 'name="inviteId"');
+  assert((await guest.html(`/join/${token}`)).includes('Шақыру қолжетімсіз'));
+  await teacher.submit(groupPath, { groupId, status: 'archived' }, 'name="status"');
+  assert.equal(
+    one<{ status: string }>('SELECT status FROM academic_groups WHERE id = ?', groupId)!.status,
+    'archived',
+  );
+  assert(
+    one(
+      'SELECT user_id FROM group_members WHERE group_id = ? AND user_id = ?',
+      groupId,
+      studentRow.id,
+    ),
+  );
+  await admin.submit(
+    otherPath,
+    {
+      userId: otherRow.id,
+      name: 'Басқа оқытушы',
+      email: 'other@integration.invalid',
+      role: 'teacher',
+      status: 'blocked',
+      department: '',
+      academicTitle: '',
+    },
+    'name="role"',
+  );
+  assert.equal((await stranger.get('/teacher')).status, 307);
+  const blockedLogin = await stranger.submit(
+    '/login',
+    { email: 'other@integration.invalid', password },
+    'name="password"',
+  );
+  assert(blockedLogin.includes('error=credentials'));
+  for (const path of [
+    '/admin',
+    '/admin/users',
+    `/admin/users/${studentRow.id}`,
+    '/admin/groups',
+    '/admin/courses',
+    '/admin/settings',
+    '/admin/activity',
+    '/teacher',
+    '/teacher/groups',
+    '/teacher/groups/new',
+    '/profile',
+  ])
+    assert.equal((await admin.get(path)).status, 200, `Admin page ${path}`);
+  assert.equal((await guest.get('/admin')).status, 307);
+  assert.equal((await student.get('/admin/users')).status, 307);
+  await teacher.submit(
+    groupPath,
+    {
+      groupId,
+      name: 'ИС-24-1 жаңартылған',
+      department: 'Кафедра',
+      academicYear: '2026–2027',
+      semester: '2',
+      description: 'Өңделген топ',
+    },
+    'name="academicYear"',
+  );
+  assert.equal(
+    one<{ semester: number }>('SELECT semester FROM academic_groups WHERE id = ?', groupId)!
+      .semester,
+    2,
+  );
+  await student.submit('/groups', { groupId, userId: studentRow.id, self: 'yes' }, 'name="self"');
+  assert(
+    !one(
+      'SELECT user_id FROM group_members WHERE group_id = ? AND user_id = ?',
+      groupId,
+      studentRow.id,
+    ),
+  );
+  assert(
+    one('SELECT user_id FROM enrollments WHERE user_id = ? AND course_id = ?', studentRow.id, id),
+  );
+  await admin.submit('/admin/courses', { courseId: id, status: 'archived' }, 'value="archived"');
+  assert(!(await student.html(`/learn/${lessonId}`)).includes('PRIVATE-LESSON-CONTENT'));
+  await admin.submit('/admin/courses', { courseId: id, status: 'draft' }, 'value="draft"');
+  await teacher.submit(editorPath, { courseId: id, title: 'Екінші бөлім' }, 'name="title"');
+  assert.equal(one<{ n: number }>('SELECT COUNT(*) n FROM sections WHERE course_id = ?', id)!.n, 2);
+  await teacher.submit(
+    `${editorPath}?lesson=${lessonId}`,
+    {
+      courseId: id,
+      lessonId,
+      sectionId,
+      title: 'Жаңартылған дәріс',
+      body: 'UPDATED-PRIVATE-LESSON',
+      videoUrl: '',
+      minutes: '15',
+    },
+    'name="lessonId"',
+  );
+  await teacher.submit(editorPath, { courseId: id }, 'Тексеруге жіберу');
+  await admin.submit('/admin', { courseId: id, decision: 'published' }, 'value="published"');
+  assert((await student.html(`/learn/${lessonId}`)).includes('UPDATED-PRIVATE-LESSON'));
+  assert.equal(
+    one<{ n: number }>('SELECT COUNT(*) n FROM lesson_progress WHERE user_id = ?', studentRow.id)!
+      .n,
+    1,
+  );
+  const candidate = new Browser();
+  await candidate.submit(
+    '/register',
+    { name: 'Өтінім иесі', email: 'candidate@integration.invalid', password },
+    'name="password"',
+  );
+  await candidate.submit(
+    '/profile',
+    { bio: 'Мен университетте оқытатын пәндерім туралы толық ақпарат ұсынамын.' },
+    'name="bio"',
+  );
+  const candidateId = one<{ id: string }>(
+    "SELECT id FROM teacher_applications WHERE status = 'pending'",
+  )!.id;
+  await admin.submit(
+    '/admin',
+    { id: candidateId, decision: 'rejected', note: 'Тәжірибені нақтылаңыз' },
+    'value="rejected"',
+  );
+  assert((await candidate.html('/profile')).includes('Тәжірибені нақтылаңыз'));
+  await candidate.submit(
+    '/profile',
+    { bio: 'Тәжірибемді және кафедрадағы пәндерімді нақтылап қайта ұсынып отырмын.' },
+    'name="bio"',
+  );
+  await admin.submit('/admin', { id: candidateId, decision: 'approved' }, 'value="approved"');
+  assert.equal((await candidate.get('/teacher/new')).status, 200);
+  const signupForm = await guest.html('/register');
+  await admin.submit(
+    '/admin/settings',
+    {
+      siteName: 'Университет',
+      institutionName: 'Тексеру университеті',
+      announcement: 'Ғылым апталығы',
+    },
+    'name="siteName"',
+  );
+  assert((await guest.html('/courses')).includes('Ғылым апталығы'));
+  assert(!(await guest.html('/register')).includes('name="password"'));
+  const closed = await guest.submit(
+    '/register',
+    { name: 'Closed signup', email: 'closed@integration.invalid', password },
+    'name="password"',
+    signupForm,
+  );
+  assert(closed.includes('registrationclosed'));
+  assert(!one('SELECT id FROM users WHERE email = ?', 'closed@integration.invalid'));
   console.log(
-    'PASS: real HTTP registration, login/logout, forged-role rejection, admin approval, forbidden actions, draft privacy, course moderation, enrollment, private lesson access, persisted progress, and paid-course unavailability.',
+    'PASS: existing learning flow plus real HTTP super-admin controls, Unicode profile editing, group creation, assignment, invitation acceptance/revocation, teacher isolation, CSV privacy, archived-history preservation, blocking/session revocation, and registration settings.',
   );
 } finally {
   server.kill();

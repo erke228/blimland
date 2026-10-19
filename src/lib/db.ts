@@ -47,11 +47,12 @@ export function migrate() {
   db().exec(
     'CREATE TABLE IF NOT EXISTS migrations (name TEXT PRIMARY KEY, applied_at INTEGER NOT NULL)',
   );
-  const name = '001_core';
-  if (!one('SELECT name FROM migrations WHERE name = ?', name)) {
-    transaction(() => {
-      db().exec(readFileSync(resolve('db/migrations/001_core.sql'), 'utf8'));
-      run('INSERT INTO migrations VALUES (?, ?)', name, Date.now());
-    });
+  for (const name of ['001_core', '002_university_management']) {
+    if (!one('SELECT name FROM migrations WHERE name = ?', name)) {
+      transaction(() => {
+        db().exec(readFileSync(resolve(`db/migrations/${name}.sql`), 'utf8'));
+        run('INSERT INTO migrations VALUES (?, ?)', name, Date.now());
+      });
+    }
   }
 }

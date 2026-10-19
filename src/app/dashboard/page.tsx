@@ -60,8 +60,19 @@ export default async function Dashboard({
           <GraduationCap />
           <span>Аккаунт түрі</span>
           <strong className="stat-label">
-            {user.role === 'admin' ? 'Әкімші' : user.role === 'teacher' ? 'Оқытушы' : 'Оқушы'}
+            {user.role === 'admin' ? 'Бас әкімші' : user.role === 'teacher' ? 'Оқытушы' : 'Студент'}
           </strong>
+        </div>
+      </div>
+      <div className="section-title">
+        <div className="student-group-banner">
+          <div>
+            <strong>Оқытушыңыздың тобына қосылыңыз</strong>
+            <p>Шақыру сілтемесімен қосылған топтар мен тағайындалған пәндер.</p>
+          </div>
+          <Link className="button outline" href="/groups">
+            Менің топтарым →
+          </Link>
         </div>
       </div>
       <div className="section-title">

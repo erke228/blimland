@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { currentUser, requireRole, requireUser, SESSION_COOKIE } from '@/lib/auth';
 import { one, run, transaction } from '@/lib/db';
 import { getCourse } from '@/lib/courses';
+import { safeReturnPath, settings } from '@/lib/management';
 import {
   hashPassword,
   verifyPassword,
@@ -21,6 +22,10 @@ const credentials = z.object({ email: z.email().max(254), password: z.string().m
 const value = (form: FormData, key: string) => String(form.get(key) ?? '').trim();
 function fail(path: string, error: string): never {
   redirect(`${path}?error=${encodeURIComponent(error)}`);
+}
+function authFail(path: string, error: string, form: FormData): never {
+  const next = safeReturnPath(value(form, 'next'));
+  redirect(`${path}?${new URLSearchParams({ error, ...(next ? { next } : {}) })}`);
 }
 async function signIn(userId: string) {
   (await cookies()).set(SESSION_COOKIE, issueSession(userId), {
@@ -43,20 +48,21 @@ function audit(actor: string, action: string, target: string) {
 }
 
 export async function register(form: FormData) {
+  if (!settings().registration_open) authFail('/register', 'registrationclosed', form);
   const parsed = credentials.extend({ name: z.string().min(2).max(80) }).safeParse({
     name: value(form, 'name'),
     email: value(form, 'email').toLowerCase(),
     password: String(form.get('password') ?? ''),
   });
-  if (!parsed.success) fail('/register', 'registration');
-  if (!rateLimit('register:global', 60, 3600000)) fail('/register', 'rate');
+  if (!parsed.success) authFail('/register', 'registration', form);
+  if (!rateLimit('register:global', 60, 3600000)) authFail('/register', 'rate', form);
   const { name, email, password } = parsed.data;
-  if (one('SELECT id FROM users WHERE email = ?', email)) fail('/register', 'email');
+  if (one('SELECT id FROM users WHERE email = ?', email)) authFail('/register', 'email', form);
   const id = randomUUID();
   const passwordHash = hashPassword(password);
   transaction(() => {
     run(
-      'INSERT INTO users VALUES (?, ?, ?, ?, ?, ?)',
+      'INSERT INTO users (id, email, name, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?, ?)',
       id,
       email,
       name,
@@ -64,18 +70,9 @@ export async function register(form: FormData) {
       'student',
       Date.now(),
     );
-    if (form.get('teacher') === 'on') {
-      run(
-        'INSERT INTO teacher_applications (id, user_id, bio, created_at) VALUES (?, ?, ?, ?)',
-        randomUUID(),
-        id,
-        'Тіркелу кезінде берілген өтінім.',
-        Date.now(),
-      );
-    }
   });
   await signIn(id);
-  redirect('/dashboard');
+  redirect(safeReturnPath(value(form, 'next')) || '/dashboard');
 }
 
 export async function login(form: FormData) {
@@ -87,16 +84,21 @@ export async function login(form: FormData) {
     !rateLimit('login:global', 400, 900000) ||
     !rateLimit(`login:${tokenHash(email)}`, 20, 900000)
   )
-    fail('/login', 'rate');
-  const user = one<{ id: string; password_hash: string }>(
-    'SELECT id, password_hash FROM users WHERE email = ?',
+    authFail('/login', 'rate', form);
+  const user = one<{ id: string; password_hash: string; status: string; role: string }>(
+    'SELECT id, password_hash, status, role FROM users WHERE email = ?',
     email,
   );
   // Perform comparable work for unknown accounts without exposing account existence.
   const stored = user?.password_hash ?? `${'0'.repeat(32)}:${'0'.repeat(128)}`;
-  if (!verifyPassword(password, stored) || !user) fail('/login', 'credentials');
+  if (!verifyPassword(password, stored) || !user || user.status !== 'active')
+    authFail('/login', 'credentials', form);
+  run('UPDATE users SET last_active_at = ? WHERE id = ?', Date.now(), user.id);
   await signIn(user.id);
-  redirect('/dashboard');
+  redirect(
+    safeReturnPath(value(form, 'next')) ||
+      (user.role === 'admin' ? '/admin' : user.role === 'teacher' ? '/teacher' : '/dashboard'),
+  );
 }
 
 export async function logout() {
@@ -111,12 +113,12 @@ export async function applyTeacher(form: FormData) {
   const user = await requireUser();
   if (user.role !== 'student') redirect('/teacher');
   const bio = value(form, 'bio');
-  if (bio.length < 20 || bio.length > 3000) fail('/teacher', 'bio');
+  if (bio.length < 20 || bio.length > 3000) fail('/profile', 'bio');
   const application = one<{ status: string }>(
     'SELECT status FROM teacher_applications WHERE user_id = ?',
     user.id,
   );
-  if (application?.status === 'pending' || application?.status === 'approved') redirect('/teacher');
+  if (application?.status === 'pending' || application?.status === 'approved') redirect('/profile');
   run(
     `INSERT INTO teacher_applications (id, user_id, bio, created_at) VALUES (?, ?, ?, ?)
     ON CONFLICT(user_id) DO UPDATE SET bio = excluded.bio, status = 'pending', review_note = '', reviewed_by = NULL, reviewed_at = NULL, created_at = excluded.created_at`,
@@ -125,8 +127,8 @@ export async function applyTeacher(form: FormData) {
     bio,
     Date.now(),
   );
-  revalidatePath('/teacher');
-  redirect('/teacher?success=application');
+  revalidatePath('/profile');
+  redirect('/profile?success=application');
 }
 
 export async function reviewTeacher(form: FormData) {
@@ -210,7 +212,8 @@ export async function createCourse(form: FormData) {
 async function editableCourse(form: FormData) {
   const user = await requireRole('teacher', 'admin');
   const course = getCourse(value(form, 'courseId'));
-  if (!course || course.owner_id !== user.id) fail('/teacher', 'forbidden');
+  if (!course || (course.owner_id !== user.id && user.role !== 'admin'))
+    fail('/teacher', 'forbidden');
   if (course.status !== 'draft') fail(`/teacher/courses/${course.id}`, 'readonly');
   return { user, course };
 }
@@ -227,6 +230,7 @@ export async function addSection(form: FormData) {
     one<{ n: number }>('SELECT COUNT(*) n FROM sections WHERE course_id = ?', course.id)!.n,
   );
   revalidatePath(`/teacher/courses/${course.id}`);
+  redirect(`/teacher/courses/${course.id}?success=saved`);
 }
 
 export async function saveLesson(form: FormData) {
@@ -295,6 +299,7 @@ export async function submitCourse(form: FormData) {
 export async function reviewCourse(form: FormData) {
   const user = await requireRole('admin');
   const courseId = value(form, 'courseId');
+  if (!['published', 'draft'].includes(value(form, 'decision'))) fail('/admin', 'invalid');
   const status = value(form, 'decision') === 'published' ? 'published' : 'draft';
   transaction(() => {
     const changed = run(
@@ -328,5 +333,6 @@ export async function completeLesson(form: FormData) {
   );
   revalidatePath('/dashboard');
   revalidatePath(`/courses/${lesson.course_id}`);
+  run('UPDATE users SET last_active_at = ? WHERE id = ?', Date.now(), user.id);
   redirect(`/learn/${lessonId}?success=completed`);
 }

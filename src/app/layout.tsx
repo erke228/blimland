@@ -4,30 +4,49 @@ import { GraduationCap, ArrowUpRight } from 'lucide-react';
 import { currentUser } from '@/lib/auth';
 import { Navigation } from '@/components/navigation';
 import { logout } from './actions';
+import { settings } from '@/lib/management';
+import '@fontsource/noto-sans/400.css';
+import '@fontsource/noto-sans/500.css';
+import '@fontsource/noto-sans/600.css';
+import '@fontsource/noto-sans/700.css';
+import '@fontsource/noto-sans/800.css';
 import './globals.css';
+import './management.css';
 
-export const metadata: Metadata = {
-  title: { default: 'BilimHub — Білімге бірге қадам', template: '%s · BilimHub' },
-  description: 'Қазақ тіліндегі оқу кеңістігі: курстар, бейнесабақтар және білімді дамыту.',
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const site = settings();
+  return {
+    title: {
+      default: `${site.site_name} — Университеттің оқу кеңістігі`,
+      template: `%s · ${site.site_name}`,
+    },
+    description:
+      'Университет оқытушылары мен студенттеріне арналған дәрістер, оқу топтары және оқу барысын бақылау.',
+  };
+}
 export const dynamic = 'force-dynamic';
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const user = await currentUser();
+  const site = settings();
   return (
     <html lang="kk" data-scroll-behavior="smooth">
       <body>
-        <Navigation role={user?.role} />
+        <Navigation
+          role={user?.role}
+          siteName={site.site_name}
+          institutionName={site.institution_name}
+        />
         <div className="app-shell">
           <header className="topbar">
             <div className="topbar-context">
               <GraduationCap size={19} />
-              <span>Үйреніңіз. Дамыңыз. Бөлісіңіз.</span>
+              <span>{site.institution_name} · Оқу кеңістігі</span>
             </div>
             <div className="account-nav">
               <span className="language-badge">ҚАЗ</span>
               {user ? (
                 <>
-                  <Link className="account" href="/dashboard">
+                  <Link className="account" href="/profile">
                     <span className="avatar">{user.name[0]}</span>
                     <span>{user.name}</span>
                   </Link>
@@ -47,9 +66,18 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               )}
             </div>
           </header>
-          <main>{children}</main>
+          <main>
+            {site.announcement && (
+              <div className="site-announcement" role="status">
+                {site.announcement}
+              </div>
+            )}
+            {children}
+          </main>
           <footer className="main-footer">
-            <span>© {new Date().getFullYear()} BilimHub</span>
+            <span>
+              © {new Date().getFullYear()} {site.site_name}
+            </span>
             <span>Әр қадам — жаңа мүмкіндік.</span>
           </footer>
         </div>

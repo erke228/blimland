@@ -10,7 +10,7 @@ if (one('SELECT id FROM courses WHERE id = ?', 'algebra-basics')) {
 transaction(() => {
   const teacherId = randomUUID();
   run(
-    'INSERT INTO users VALUES (?, ?, ?, ?, ?, ?)',
+    'INSERT INTO users (id, email, name, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?, ?)',
     teacherId,
     'demo-author@example.invalid',
     'Айдана Сәрсен',

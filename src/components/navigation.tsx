@@ -10,42 +10,122 @@ import {
   Compass,
   Menu,
   X,
+  Users,
+  Settings,
+  UserRound,
+  Activity,
 } from 'lucide-react';
 import { useState } from 'react';
 
-export function Navigation({ role }: { role?: string }) {
+export function Navigation({
+  role,
+  siteName,
+  institutionName,
+}: {
+  role?: string;
+  siteName: string;
+  institutionName: string;
+}) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const links = [
-    {
-      href: '/courses',
-      label: 'Курстар каталогы',
-      icon: Compass,
-      active: pathname === '/' || pathname.startsWith('/courses') || pathname.startsWith('/learn'),
-    },
-    {
-      href: '/dashboard',
-      label: 'Менің оқуым',
-      icon: LayoutDashboard,
-      active: pathname === '/dashboard',
-    },
-    {
-      href: '/teacher',
-      label: 'Оқытушы кабинеті',
-      icon: GraduationCap,
-      active: pathname.startsWith('/teacher'),
-    },
-    ...(role === 'admin'
+  const isTeacher = role === 'teacher' || role === 'admin';
+  const links =
+    role === 'admin'
       ? [
           {
             href: '/admin',
-            label: 'Әкімші кабинеті',
-            icon: ShieldCheck,
+            label: 'Басқару тақтасы',
+            icon: LayoutDashboard,
             active: pathname === '/admin',
           },
+          {
+            href: '/admin/users',
+            label: 'Пайдаланушылар',
+            icon: Users,
+            active: pathname.startsWith('/admin/users'),
+          },
+          {
+            href: '/admin/courses',
+            label: 'Барлық курстар',
+            icon: BookOpen,
+            active: pathname.startsWith('/admin/courses'),
+          },
+          {
+            href: '/admin/groups',
+            label: 'Оқу топтары',
+            icon: GraduationCap,
+            active: pathname === '/admin/groups' || pathname.startsWith('/teacher/groups'),
+          },
+          {
+            href: '/teacher',
+            label: 'Менің дәрістерім',
+            icon: Compass,
+            active: pathname.startsWith('/teacher') && !pathname.startsWith('/teacher/groups'),
+          },
+          {
+            href: '/admin/activity',
+            label: 'Әрекеттер журналы',
+            icon: Activity,
+            active: pathname === '/admin/activity',
+          },
+          {
+            href: '/admin/settings',
+            label: 'Сайт баптаулары',
+            icon: Settings,
+            active: pathname === '/admin/settings',
+          },
+          {
+            href: '/profile',
+            label: 'Менің профилім',
+            icon: UserRound,
+            active: pathname === '/profile',
+          },
         ]
-      : []),
-  ];
+      : [
+          ...(isTeacher
+            ? [
+                {
+                  href: '/teacher',
+                  label: 'Оқытушы кабинеті',
+                  icon: LayoutDashboard,
+                  active:
+                    pathname.startsWith('/teacher') && !pathname.startsWith('/teacher/groups'),
+                },
+                {
+                  href: '/teacher/groups',
+                  label: 'Менің топтарым',
+                  icon: Users,
+                  active: pathname.startsWith('/teacher/groups'),
+                },
+              ]
+            : [
+                {
+                  href: '/dashboard',
+                  label: 'Менің оқуым',
+                  icon: LayoutDashboard,
+                  active: pathname === '/dashboard',
+                },
+                {
+                  href: '/groups',
+                  label: 'Менің топтарым',
+                  icon: Users,
+                  active: pathname === '/groups',
+                },
+              ]),
+          {
+            href: '/courses',
+            label: 'Пәндер мен курстар',
+            icon: Compass,
+            active:
+              pathname === '/' || pathname.startsWith('/courses') || pathname.startsWith('/learn'),
+          },
+          {
+            href: '/profile',
+            label: 'Менің профилім',
+            icon: UserRound,
+            active: pathname === '/profile',
+          },
+        ];
   return (
     <>
       <button
@@ -53,32 +133,38 @@ export function Navigation({ role }: { role?: string }) {
         onClick={() => setOpen(!open)}
         aria-label="Мәзір"
         aria-expanded={open}
+        aria-controls="main-sidebar"
       >
         {open ? <X /> : <Menu />}
       </button>
-      <aside className={`sidebar ${open ? 'open' : ''}`}>
-        <Link href="/" className="brand" onClick={() => setOpen(false)}>
+      <aside id="main-sidebar" className={`sidebar ${open ? 'open' : ''}`}>
+        <Link href="/" className="brand" onClick={() => setOpen(false)} title={siteName}>
           <span className="brand-icon">
             <BookOpen size={23} />
           </span>
-          bilim<span className="brand-light">hub</span>
+          <span className="brand-text">{siteName}</span>
           <span className="brand-dot" />
         </Link>
         <div className="workspace">
-          <span className="workspace-icon">Қ</span>
+          <span className="workspace-icon">
+            {role === 'admin' ? <ShieldCheck size={19} /> : 'У'}
+          </span>
           <div>
-            <strong>Білім кеңістігі</strong>
-            <span>Қазақ тілінде үйреніңіз</span>
+            <strong>
+              {role === 'admin' ? 'Бас әкімші' : isTeacher ? 'Оқытушы' : role ? 'Студент' : 'Қонақ'}
+            </strong>
+            <span title={institutionName}>{institutionName}</span>
           </div>
         </div>
-        <p className="nav-caption">ПЛАТФОРМА</p>
-        <nav>
+        <p className="nav-caption">{role === 'admin' ? 'БАСҚАРУ ОРТАЛЫҒЫ' : 'ОҚУ КЕҢІСТІГІ'}</p>
+        <nav aria-label="Негізгі мәзір">
           {links.map(({ href, label, icon: Icon, active }) => (
             <Link
               key={href}
               href={href}
               className={`nav-link ${active ? 'active' : ''}`}
               onClick={() => setOpen(false)}
+              aria-current={active ? 'page' : undefined}
             >
               <Icon size={19} />
               {label}
@@ -87,18 +173,8 @@ export function Navigation({ role }: { role?: string }) {
           ))}
         </nav>
         <div className="sidebar-bottom">
-          <div className="teacher-promo">
-            <span className="promo-icon">
-              <GraduationCap size={23} />
-            </span>
-            <strong>Біліміңізбен бөлісіңіз</strong>
-            <p>Өз курсыңызды жасап, оқушыларға жол ашыңыз.</p>
-            <Link href="/teacher" onClick={() => setOpen(false)}>
-              Оқытушы болу <ArrowUpRight size={16} />
-            </Link>
-          </div>
           <div className="sidebar-foot">
-            Қазақстанда білімге жол ашамыз
+            Университеттің цифрлық оқу кеңістігі
             <span>
               ҚАЗ <i /> KZT ₸
             </span>

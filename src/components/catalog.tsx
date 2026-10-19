@@ -19,19 +19,19 @@ export function Catalog({ q = '', category = '' }: { q?: string; category?: stri
   return (
     <>
       <PageHeading
-        eyebrow="БІЛІМГЕ БІРГЕ ҚАДАМ"
-        title="Бүгін нені үйренеміз?"
-        description="Өзіңізге ұнайтын бағытты тауып, жаңа мүмкіндіктерге жол ашыңыз."
+        eyebrow="УНИВЕРСИТЕТТІҢ ОҚУ КЕҢІСТІГІ"
+        title="Дәрістерден терең білімге"
+        description="Пәндер, оқытушы материалдары және студенттің жеке оқу жолы."
       />
       <section className="hero">
         <div className="hero-copy">
           <span className="hero-tag">
-            <span /> Білім алудың жаңа кеңістігі
+            <span /> Оқытушылар мен студенттерге
           </span>
           <h2>
-            Үлкен мақсаттар
+            Оқу материалдары
             <br />
-            шағын қадамнан <em>басталады.</em>
+            бір кеңістікте <em>біріктірілген.</em>
           </h2>
           <p>
             Түсінікті сабақтар, өз қарқыныңызбен оқу және
@@ -157,15 +157,6 @@ export function Catalog({ q = '', category = '' }: { q?: string; category?: stri
         <p className="demo-note">
           Алғашқы курстар — платформаның жұмысын көрсетуге арналған үлгі материалдар.
         </p>
-      </section>
-      <section className="bottom-callout">
-        <div>
-          <h3>Білгеніңіз біреудің бастамасы болсын.</h3>
-          <p>Оқытушы ретінде тіркеліп, өз курсыңызды жасаңыз.</p>
-        </div>
-        <Link className="button outline" href="/teacher">
-          Оқытушы болу <ArrowRight size={17} />
-        </Link>
       </section>
     </>
   );

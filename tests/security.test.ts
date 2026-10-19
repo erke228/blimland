@@ -16,7 +16,7 @@ process.env.DATABASE_PATH = ':memory:';
 migrate();
 const userId = randomUUID();
 run(
-  'INSERT INTO users VALUES (?, ?, ?, ?, ?, ?)',
+  'INSERT INTO users (id, email, name, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?, ?)',
   userId,
   'test@example.invalid',
   'Тест',

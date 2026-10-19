@@ -10,5 +10,6 @@ uploads/
 coverage/
 test-results/
 .test-data/
+.local/
 *.log
 .DS_Store

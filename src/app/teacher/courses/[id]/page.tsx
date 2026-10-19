@@ -18,7 +18,7 @@ export default async function CourseEditor({
   const { id } = await params;
   const query = await searchParams;
   const course = getCourse(id);
-  if (!course || course.owner_id !== user.id) notFound();
+  if (!course || (course.owner_id !== user.id && user.role !== 'admin')) notFound();
   const sections = all<{ id: string; title: string }>(
     'SELECT id, title FROM sections WHERE course_id = ? ORDER BY position',
     id,

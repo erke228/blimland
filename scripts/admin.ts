@@ -9,13 +9,17 @@ if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
   process.exit(1);
 }
 migrate();
+if (one("SELECT id FROM users WHERE role = 'admin'")) {
+  console.error('The super administrator already exists. A second owner cannot be created.');
+  process.exit(1);
+}
 if (one('SELECT id FROM users WHERE email = ?', email)) {
   console.error('Account already exists. No roles or credentials changed.');
   process.exit(1);
 }
 const password = randomBytes(18).toString('base64url');
 run(
-  'INSERT INTO users VALUES (?, ?, ?, ?, ?, ?)',
+  'INSERT INTO users (id, email, name, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?, ?)',
   randomUUID(),
   email,
   name,

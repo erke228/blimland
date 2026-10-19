@@ -4,13 +4,16 @@ import { currentUser } from '@/lib/auth';
 import { login } from '../actions';
 import { Notice } from '@/components/ui';
 import { SubmitButton } from '@/components/submit-button';
+import { safeReturnPath } from '@/lib/management';
 export default async function Login({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; next?: string }>;
 }) {
-  if (await currentUser()) redirect('/dashboard');
-  const { error } = await searchParams;
+  const query = await searchParams;
+  const next = safeReturnPath(query.next);
+  if (await currentUser()) redirect(next || '/');
+  const { error } = query;
   return (
     <div className="auth-layout">
       <div className="auth-intro">
@@ -28,6 +31,7 @@ export default async function Login({
         <p className="muted">Оқуды жалғастыру үшін аккаунтыңызға кіріңіз.</p>
         <Notice error={error} />
         <form action={login} className="form-stack">
+          <input type="hidden" name="next" value={next} />
           <label>
             Email
             <input
@@ -52,7 +56,10 @@ export default async function Login({
           <SubmitButton>Кіру →</SubmitButton>
         </form>
         <p className="auth-switch">
-          Аккаунтыңыз жоқ па? <Link href="/register">Тіркелу</Link>
+          Аккаунтыңыз жоқ па?{' '}
+          <Link href={next ? `/register?next=${encodeURIComponent(next)}` : '/register'}>
+            Тіркелу
+          </Link>
         </p>
         <p className="help-text">Құпиясөзді қалпына келтіру қызметі келесі кезеңде қосылады.</p>
       </div>
