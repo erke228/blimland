@@ -1,0 +1,14 @@
+node_modules/
+.next/
+out/
+data/
+uploads/
+.env
+.env.*
+!.env.example
+*.tsbuildinfo
+coverage/
+test-results/
+.test-data/
+*.log
+.DS_Store
