@@ -4,8 +4,15 @@ import { selectLectureCover } from '@/app/actions';
 import { CourseCover } from './ui';
 import { CoverPicker } from './cover-picker';
 import { SubmitButton } from './submit-button';
-export function LectureCoverEditor({ course, lessonId }: { course: Course; lessonId: string }) {
-  const cover = lectureCoverPresentation(lessonId);
+import { FilePicker } from './file-picker';
+export async function LectureCoverEditor({
+  course,
+  lessonId,
+}: {
+  course: Course;
+  lessonId: string;
+}) {
+  const cover = await lectureCoverPresentation(lessonId);
   return (
     <details className="lecture-cover-settings" id="lecture-cover">
       <summary>Дәрістің жеке мұқабасы</summary>
@@ -24,11 +31,14 @@ export function LectureCoverEditor({ course, lessonId }: { course: Course; lesso
       >
         <input type="hidden" name="courseId" value={course.id} />
         <input type="hidden" name="lessonId" value={lessonId} />
-        <label>
-          Дәрістің суреті
-          <input type="file" name="file" accept="image/jpeg,image/png,image/webp" required />
-          <small>JPG, PNG, WebP · 5 МБ · 20 Мп · 16:9.</small>
-        </label>
+        <FilePicker
+          label="Дәріс мұқабасын таңдау"
+          accept="image/jpeg,image/png,image/webp"
+          required
+          image
+          previewImage
+          help="JPG / PNG / WebP · 5 МБ · 20 Мп · 16:9."
+        />
         <SubmitButton className="button outline">Дәріс суретін жүктеу</SubmitButton>
       </form>
       <form action={selectLectureCover} className="form-stack">

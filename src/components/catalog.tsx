@@ -12,7 +12,7 @@ import {
 import { listCourses } from '@/lib/courses';
 import { currentUser } from '@/lib/auth';
 import { CourseCard, EmptyState, PageHeading } from './ui';
-
+import { CoverIllustration } from './cover-illustration';
 export async function Catalog({ q = '', category = '' }: { q?: string; category?: string }) {
   const user = await currentUser();
   const startHref = !user
@@ -29,8 +29,11 @@ export async function Catalog({ q = '', category = '' }: { q?: string; category?
       : user.role === 'teacher'
         ? 'Оқытушы кабинеті'
         : 'Оқуды жалғастыру';
-  const courses = listCourses(q.slice(0, 200), category.slice(0, 100));
-  const categories = ['Барлығы', ...new Set(listCourses().map((course) => course.category))];
+  const courses = await listCourses(q.slice(0, 200), category.slice(0, 100));
+  const categories = [
+    'Барлығы',
+    ...new Set((await listCourses()).map((course) => course.category)),
+  ];
   const featured = courses.find((course) => course.first_lesson_id);
   return (
     <>
@@ -40,6 +43,9 @@ export async function Catalog({ q = '', category = '' }: { q?: string; category?
         description="Пәндер, оқытушы материалдары және студенттің жеке оқу жолы."
       />
       <section className="hero">
+        <div className="hero-mobile-art" aria-hidden="true">
+          <CoverIllustration preset="university" />
+        </div>
         <div className="hero-copy">
           <span className="hero-tag">
             <span /> Оқытушылар мен студенттерге
@@ -75,7 +81,7 @@ export async function Catalog({ q = '', category = '' }: { q?: string; category?
             </Link>
           ) : (
             <div className="hero-note">
-              <Check size={15} /> Тегін курстардан бастаңыз
+              <Check size={15} /> Курстардан оқуды бастаңыз
             </div>
           )}
         </div>

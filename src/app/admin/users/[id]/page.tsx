@@ -10,12 +10,17 @@ export default async function UserEditor({
   params,
   searchParams,
 }: {
-  params: Promise<{ id: string }>;
-  searchParams: Promise<{ error?: string; success?: string }>;
+  params: Promise<{
+    id: string;
+  }>;
+  searchParams: Promise<{
+    error?: string;
+    success?: string;
+  }>;
 }) {
   await requireRole('admin');
   const { id } = await params;
-  const target = one<{
+  const target = await one<{
     id: string;
     name: string;
     email: string;
@@ -28,19 +33,19 @@ export default async function UserEditor({
     id,
   );
   if (!target) notFound();
-  const enrollments = one<{ n: number }>(
-    'SELECT COUNT(*) n FROM enrollments WHERE user_id = ?',
-    id,
-  )!.n;
-  const groups = all<{ id: string; name: string }>(
+  const enrollments = (await one<{
+    n: number;
+  }>('SELECT COUNT(*) n FROM enrollments WHERE user_id = ?', id))!.n;
+  const groups = await all<{
+    id: string;
+    name: string;
+  }>(
     'SELECT g.id, g.name FROM academic_groups g JOIN group_members m ON m.group_id = g.id WHERE m.user_id = ?',
     id,
   );
-  const sessions = one<{ n: number }>(
-    'SELECT COUNT(*) n FROM sessions WHERE user_id = ? AND expires_at > ?',
-    id,
-    Date.now(),
-  )!.n;
+  const sessions = (await one<{
+    n: number;
+  }>('SELECT COUNT(*) n FROM sessions WHERE user_id = ? AND expires_at > ?', id, Date.now()))!.n;
   const owner = target.role === 'admin';
   return (
     <>

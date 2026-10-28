@@ -286,27 +286,7 @@ h3 {
   font-size: 11px;
   color: #879d8d;
 }
-.font-specimen {
-  padding: 22px 0 0;
-  margin-top: 27px;
-  border-top: 1px solid var(--line);
-}
-.font-specimen > span {
-  font-size: 11px;
-  color: #90a193;
-}
-.font-specimen > p {
-  font-size: 26px;
-  font-weight: 600;
-  margin: 14px 0;
-  line-height: 1.8;
-  color: #386449;
-}
-.font-specimen small {
-  font-size: 12px;
-  color: #8c9f8e;
-  line-height: 1.9;
-}
+
 .detail-list {
   margin: 15px 0;
 }
@@ -598,9 +578,7 @@ details[open] > summary {
   .management-filters .button {
     width: 100%;
   }
-  .font-specimen > p {
-    font-size: 23px;
-  }
+
   .page-heading p {
     font-size: 12px;
   }
@@ -637,9 +615,6 @@ details[open] > summary {
     flex-wrap: wrap;
   }
   .copy-link input {
-    font-size: 12px;
-  }
-  .font-specimen small {
     font-size: 12px;
   }
 }

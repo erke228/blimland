@@ -24,12 +24,11 @@ import {
   safeReturnPath,
   ManagementError,
 } from '../src/lib/management';
-
 process.env.DATABASE_PATH = ':memory:';
-migrate();
-function user(role = 'student') {
+await migrate();
+async function user(role = 'student') {
   const id = randomUUID();
-  run(
+  await run(
     'INSERT INTO users (id, email, name, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?, ?)',
     id,
     `${id}@test.invalid`,
@@ -40,11 +39,11 @@ function user(role = 'student') {
   );
   return id;
 }
-const admin = user('admin');
-const teacher = user('teacher');
-const otherTeacher = user('teacher');
-const student = user();
-const otherStudent = user();
+const admin = await user('admin');
+const teacher = await user('teacher');
+const otherTeacher = await user('teacher');
+const student = await user();
+const otherStudent = await user();
 const input = {
   name: 'ИС-24-1',
   department: 'Ақпараттық жүйелер',
@@ -52,20 +51,19 @@ const input = {
   semester: 1,
   description: 'Тексеру тобы',
 };
-function group() {
-  return saveGroup(teacher, input);
+async function group() {
+  return await saveGroup(teacher, input);
 }
-function course(price = 0, owner = teacher) {
+async function course(owner = teacher) {
   const id = randomUUID();
-  run(
-    'INSERT INTO courses VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+  await run(
+    'INSERT INTO courses (id,owner_id,title,description,category,level,status,accent,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)',
     id,
     owner,
     'Университет дәрісі',
     'Курс сипаттамасы',
     'Басқа',
     'Бастапқы',
-    price,
     'published',
     'teal',
     Date.now(),
@@ -76,123 +74,174 @@ function course(price = 0, owner = teacher) {
 function code(expected: string) {
   return (error: unknown) => error instanceof ManagementError && error.code === expected;
 }
-
-test('Only one super administrator can exist, including direct SQL writes', () => {
-  assert.throws(() => user('admin'));
-  assert.equal(one<{ n: number }>("SELECT COUNT(*) n FROM users WHERE role = 'admin'")!.n, 1);
+test('Only one super administrator can exist, including direct SQL writes', async () => {
+  await assert.rejects(async () => await user('admin'));
+  assert.equal(
+    (await one<{
+      n: number;
+    }>("SELECT COUNT(*) n FROM users WHERE role = 'admin'"))!.n,
+    1,
+  );
 });
-test('Groups are isolated by teacher; students cannot manage any group', () => {
-  const id = group();
-  assert.equal(managedGroup(teacher, id).id, id);
-  assert.equal(managedGroup(admin, id).id, id);
-  assert.throws(() => managedGroup(otherTeacher, id), code('forbidden'));
-  assert.throws(() => managedGroup(student, id), code('forbidden'));
-  assert.throws(() => saveGroup(student, input), code('forbidden'));
-  assert(!listGroups(otherTeacher).some((g) => g.id === id));
+test('Groups are isolated by teacher; students cannot manage any group', async () => {
+  const id = await group();
+  assert.equal((await managedGroup(teacher, id)).id, id);
+  assert.equal((await managedGroup(admin, id)).id, id);
+  await assert.rejects(async () => await managedGroup(otherTeacher, id), code('forbidden'));
+  await assert.rejects(async () => await managedGroup(student, id), code('forbidden'));
+  await assert.rejects(async () => await saveGroup(student, input), code('forbidden'));
+  assert(!(await listGroups(otherTeacher)).some((g) => g.id === id));
 });
-test('Academic year must be consecutive and group data is bounded', () => {
-  assert.throws(
-    () => saveGroup(teacher, { ...input, academic_year: '2026–2029' }),
+test('Academic year must be consecutive and group data is bounded', async () => {
+  await assert.rejects(
+    async () => await saveGroup(teacher, { ...input, academic_year: '2026–2029' }),
     code('groupform'),
   );
-  assert.throws(() => saveGroup(teacher, { ...input, name: '' }), code('groupform'));
+  await assert.rejects(
+    async () => await saveGroup(teacher, { ...input, name: '' }),
+    code('groupform'),
+  );
 });
-test('Invite tokens are hashed; accepting grants only assigned free published courses', () => {
-  const id = group();
-  const free = course();
-  const paid = course(1000);
-  assignCourse(teacher, id, free);
-  assert.throws(() => assignCourse(teacher, id, paid), code('payment'));
-  const token = newInvite(teacher, id, 7, 10);
-  const row = one<{ token_hash: string }>(
-    'SELECT token_hash FROM group_invites WHERE group_id = ?',
-    id,
-  )!;
+test('Invite tokens are hashed; accepting grants all assigned published courses but no drafts or unassigned courses', async () => {
+  const id = await group();
+  const first = await course();
+  const second = await course();
+  const unassigned = await course();
+  const draft = await course();
+  await run("UPDATE courses SET status='draft' WHERE id=?", draft);
+  await assignCourse(teacher, id, first);
+  await assignCourse(teacher, id, second);
+  await assert.rejects(async () => await assignCourse(teacher, id, draft), code('forbidden'));
+  const token = await newInvite(teacher, id, 7, 10);
+  const row = (await one<{
+    token_hash: string;
+  }>('SELECT token_hash FROM group_invites WHERE group_id = ?', id))!;
   assert.equal(row.token_hash, tokenHash(token));
   assert.notEqual(row.token_hash, token);
-  acceptInvitation(student, token);
-  assert(one('SELECT user_id FROM enrollments WHERE user_id = ? AND course_id = ?', student, free));
+  await acceptInvitation(student, token);
   assert(
-    !one('SELECT user_id FROM enrollments WHERE user_id = ? AND course_id = ?', student, paid),
+    await one(
+      'SELECT user_id FROM enrollments WHERE user_id = ? AND course_id = ?',
+      student,
+      first,
+    ),
+  );
+  assert(
+    await one(
+      'SELECT user_id FROM enrollments WHERE user_id = ? AND course_id = ?',
+      student,
+      second,
+    ),
+  );
+  assert(
+    !(await one(
+      'SELECT user_id FROM enrollments WHERE user_id = ? AND course_id = ?',
+      student,
+      unassigned,
+    )),
   );
 });
-test('Repeated acceptance is idempotent, while a full invite rejects a new student', () => {
-  const id = group();
-  const token = newInvite(teacher, id, 7, 1);
-  acceptInvitation(student, token);
-  acceptInvitation(student, token);
+test('Repeated acceptance is idempotent, while a full invite rejects a new student', async () => {
+  const id = await group();
+  const token = await newInvite(teacher, id, 7, 1);
+  await acceptInvitation(student, token);
+  await acceptInvitation(student, token);
   assert.equal(
-    one<{ uses: number }>('SELECT uses FROM group_invites WHERE token_hash = ?', tokenHash(token))!
-      .uses,
+    (await one<{
+      uses: number;
+    }>('SELECT uses FROM group_invites WHERE token_hash = ?', tokenHash(token)))!.uses,
     1,
   );
-  assert.throws(() => acceptInvitation(otherStudent, token), code('invite'));
+  await assert.rejects(async () => await acceptInvitation(otherStudent, token), code('invite'));
   assert.equal(
-    one<{ n: number }>('SELECT COUNT(*) n FROM group_members WHERE group_id = ?', id)!.n,
+    (await one<{
+      n: number;
+    }>('SELECT COUNT(*) n FROM group_members WHERE group_id = ?', id))!.n,
     1,
   );
 });
-test('Expired, revoked, malformed and teacher-account invitations are rejected', () => {
-  const id = group();
-  const token = newInvite(teacher, id, 1, 10);
-  assert.throws(() => acceptInvitation(teacher, token), code('studentonly'));
-  run('UPDATE group_invites SET expires_at = 0 WHERE token_hash = ?', tokenHash(token));
-  assert.equal(invitation(token), undefined);
-  assert.throws(() => acceptInvitation(student, token), code('invite'));
-  const next = newInvite(teacher, id, 7, 10);
-  const invite = one<{ id: string }>(
-    'SELECT id FROM group_invites WHERE token_hash = ?',
-    tokenHash(next),
-  )!;
-  revokeInvite(teacher, id, invite.id);
-  assert.equal(invitation(next), undefined);
-  assert.throws(() => acceptInvitation(student, '../../admin'), code('invite'));
+test('Expired, revoked, malformed and teacher-account invitations are rejected', async () => {
+  const id = await group();
+  const token = await newInvite(teacher, id, 1, 10);
+  await assert.rejects(async () => await acceptInvitation(teacher, token), code('studentonly'));
+  await run('UPDATE group_invites SET expires_at = 0 WHERE token_hash = ?', tokenHash(token));
+  assert.equal(await invitation(token), undefined);
+  await assert.rejects(async () => await acceptInvitation(student, token), code('invite'));
+  const next = await newInvite(teacher, id, 7, 10);
+  const invite = (await one<{
+    id: string;
+  }>('SELECT id FROM group_invites WHERE token_hash = ?', tokenHash(next)))!;
+  await revokeInvite(teacher, id, invite.id);
+  assert.equal(await invitation(next), undefined);
+  await assert.rejects(async () => await acceptInvitation(student, '../../admin'), code('invite'));
 });
-test('Archiving revokes invitations without deleting members or their learning history', () => {
-  const id = group();
-  const token = newInvite(teacher, id, 7, 10);
-  acceptInvitation(student, token);
-  groupStatus(teacher, id, 'archived');
-  assert.equal(invitation(token), undefined);
-  assert.throws(() => newInvite(teacher, id, 7, 10), code('archivedgroup'));
-  assert(one('SELECT user_id FROM group_members WHERE group_id = ? AND user_id = ?', id, student));
-  groupStatus(teacher, id, 'active');
-  assert.equal(invitation(token), undefined);
-});
-test('Course assignment enrolls existing members and refuses another teacher’s course', () => {
-  const id = group();
-  acceptInvitation(student, newInvite(teacher, id, 7, 10));
-  const own = course();
-  const foreign = course(0, otherTeacher);
-  assignCourse(teacher, id, own);
-  assert(one('SELECT user_id FROM enrollments WHERE user_id = ? AND course_id = ?', student, own));
-  assert.throws(() => assignCourse(teacher, id, foreign), code('forbidden'));
-  assignCourse(admin, id, foreign);
+test('Archiving revokes invitations without deleting members or their learning history', async () => {
+  const id = await group();
+  const token = await newInvite(teacher, id, 7, 10);
+  await acceptInvitation(student, token);
+  await groupStatus(teacher, id, 'archived');
+  assert.equal(await invitation(token), undefined);
+  await assert.rejects(async () => await newInvite(teacher, id, 7, 10), code('archivedgroup'));
   assert(
-    one('SELECT user_id FROM enrollments WHERE user_id = ? AND course_id = ?', student, foreign),
+    await one('SELECT user_id FROM group_members WHERE group_id = ? AND user_id = ?', id, student),
+  );
+  await groupStatus(teacher, id, 'active');
+  assert.equal(await invitation(token), undefined);
+});
+test('Course assignment enrolls existing members and refuses another teacher’s course', async () => {
+  const id = await group();
+  await acceptInvitation(student, await newInvite(teacher, id, 7, 10));
+  const own = await course();
+  const foreign = await course(otherTeacher);
+  await assignCourse(teacher, id, own);
+  assert(
+    await one('SELECT user_id FROM enrollments WHERE user_id = ? AND course_id = ?', student, own),
+  );
+  await assert.rejects(async () => await assignCourse(teacher, id, foreign), code('forbidden'));
+  await assignCourse(admin, id, foreign);
+  assert(
+    await one(
+      'SELECT user_id FROM enrollments WHERE user_id = ? AND course_id = ?',
+      student,
+      foreign,
+    ),
   );
 });
-test('Only group managers can remove members; removal preserves enrollment', () => {
-  const id = group();
-  const c = course();
-  assignCourse(teacher, id, c);
-  acceptInvitation(student, newInvite(teacher, id, 7, 10));
-  assert.throws(() => removeMember(otherStudent, id, student), code('forbidden'));
-  assert.throws(() => removeMember(student, id, student), code('forbidden'));
-  assert.throws(() => removeMember(otherTeacher, id, student), code('forbidden'));
-  removeMember(teacher, id, student);
-  assert(!one('SELECT user_id FROM group_members WHERE group_id = ? AND user_id = ?', id, student));
-  assert(one('SELECT user_id FROM enrollments WHERE user_id = ? AND course_id = ?', student, c));
+test('Only group managers can remove members; removal preserves enrollment', async () => {
+  const id = await group();
+  const c = await course();
+  await assignCourse(teacher, id, c);
+  await acceptInvitation(student, await newInvite(teacher, id, 7, 10));
+  await assert.rejects(
+    async () => await removeMember(otherStudent, id, student),
+    code('forbidden'),
+  );
+  await assert.rejects(async () => await removeMember(student, id, student), code('forbidden'));
+  await assert.rejects(
+    async () => await removeMember(otherTeacher, id, student),
+    code('forbidden'),
+  );
+  await removeMember(teacher, id, student);
+  assert(
+    !(await one(
+      'SELECT user_id FROM group_members WHERE group_id = ? AND user_id = ?',
+      id,
+      student,
+    )),
+  );
+  assert(
+    await one('SELECT user_id FROM enrollments WHERE user_id = ? AND course_id = ?', student, c),
+  );
 });
-test('Group report counts only assigned course lessons and is unavailable to other teachers', () => {
-  const id = group();
-  const c = course();
-  assignCourse(teacher, id, c);
-  acceptInvitation(student, newInvite(teacher, id, 7, 10));
+test('Group report counts only assigned course lessons and is unavailable to other teachers', async () => {
+  const id = await group();
+  const c = await course();
+  await assignCourse(teacher, id, c);
+  await acceptInvitation(student, await newInvite(teacher, id, 7, 10));
   const section = randomUUID();
   const lesson = randomUUID();
-  run('INSERT INTO sections VALUES (?, ?, ?, ?)', section, c, 'Бөлім', 0);
-  run(
+  await run('INSERT INTO sections VALUES (?, ?, ?, ?)', section, c, 'Бөлім', 0);
+  await run(
     'INSERT INTO lessons VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
     lesson,
     section,
@@ -203,23 +252,25 @@ test('Group report counts only assigned course lessons and is unavailable to oth
     0,
     0,
   );
-  run(
+  await run(
     'INSERT INTO lesson_progress (user_id, lesson_id, completed_at) VALUES (?, ?, ?)',
     student,
     lesson,
     Date.now(),
   );
-  const report = groupReport(teacher, id);
+  const report = await groupReport(teacher, id);
   assert.equal(report[0].completed, 1);
   assert.equal(report[0].total, 1);
-  assert.throws(() => groupReport(otherTeacher, id), code('forbidden'));
-  assert.throws(() => groupReport(student, id), code('forbidden'));
+  await assert.rejects(async () => await groupReport(otherTeacher, id), code('forbidden'));
+  await assert.rejects(async () => await groupReport(student, id), code('forbidden'));
 });
-test('Blocking a user revokes sessions and prevents all service operations', () => {
-  const id = user();
-  issueSession(id);
-  const target = one<{ email: string }>('SELECT email FROM users WHERE id = ?', id)!;
-  updateUser(admin, id, {
+test('Blocking a user revokes sessions and prevents all service operations', async () => {
+  const id = await user();
+  await issueSession(id);
+  const target = (await one<{
+    email: string;
+  }>('SELECT email FROM users WHERE id = ?', id))!;
+  await updateUser(admin, id, {
     name: 'Бұғатталған студент',
     email: target.email,
     role: 'student',
@@ -227,11 +278,18 @@ test('Blocking a user revokes sessions and prevents all service operations', () 
     department: '',
     academic_title: '',
   });
-  assert.equal(one<{ n: number }>('SELECT COUNT(*) n FROM sessions WHERE user_id = ?', id)!.n, 0);
-  assert.throws(() => actor(id), code('forbidden'));
+  assert.equal(
+    (await one<{
+      n: number;
+    }>('SELECT COUNT(*) n FROM sessions WHERE user_id = ?', id))!.n,
+    0,
+  );
+  await assert.rejects(async () => await actor(id), code('forbidden'));
 });
-test('Super administrator cannot be demoted or blocked; ordinary users cannot edit roles', () => {
-  const email = one<{ email: string }>('SELECT email FROM users WHERE id = ?', admin)!.email;
+test('Super administrator cannot be demoted or blocked; ordinary users cannot edit roles', async () => {
+  const email = (await one<{
+    email: string;
+  }>('SELECT email FROM users WHERE id = ?', admin))!.email;
   const data = {
     name: 'Бас әкімші',
     email,
@@ -240,49 +298,53 @@ test('Super administrator cannot be demoted or blocked; ordinary users cannot ed
     department: '',
     academic_title: '',
   };
-  assert.throws(
-    () => updateUser(admin, admin, { ...data, role: 'student' }),
+  await assert.rejects(
+    async () => await updateUser(admin, admin, { ...data, role: 'student' }),
     code('ownerprotected'),
   );
-  assert.throws(
-    () => updateUser(admin, admin, { ...data, status: 'blocked' }),
+  await assert.rejects(
+    async () => await updateUser(admin, admin, { ...data, status: 'blocked' }),
     code('ownerprotected'),
   );
-  assert.throws(() => updateUser(student, admin, data), code('forbidden'));
-  assert.throws(() => updateUser(admin, student, data), code('ownerprotected'));
+  await assert.rejects(async () => await updateUser(student, admin, data), code('forbidden'));
+  await assert.rejects(async () => await updateUser(admin, student, data), code('ownerprotected'));
 });
-test('Profile input cannot elevate a student or change their email', () => {
-  const email = one<{ email: string }>('SELECT email FROM users WHERE id = ?', student)!.email;
-  updateOwnProfile(student, {
+test('Profile input cannot elevate a student or change their email', async () => {
+  const email = (await one<{
+    email: string;
+  }>('SELECT email FROM users WHERE id = ?', student))!.email;
+  await updateOwnProfile(student, {
     name: 'Өзгерген студент',
     department: 'Қазақ тілі',
     academic_title: 'Студент',
     role: 'admin',
     email: 'evil@example.invalid',
   });
-  const saved = one<{ role: string; email: string }>(
-    'SELECT role, email FROM users WHERE id = ?',
-    student,
-  )!;
+  const saved = (await one<{
+    role: string;
+    email: string;
+  }>('SELECT role, email FROM users WHERE id = ?', student))!;
   assert.equal(saved.role, 'student');
   assert.equal(saved.email, email);
 });
-test('Only owner can change site settings or revoke another user’s sessions', () => {
+test('Only owner can change site settings or revoke another user’s sessions', async () => {
   const input = {
     site_name: 'Тексеру университеті',
     institution_name: 'Университет',
     announcement: 'Ғылым апталығы',
     registration_open: 0,
   };
-  assert.throws(() => saveSettings(teacher, input), code('forbidden'));
-  saveSettings(admin, input);
-  assert.equal(settings().registration_open, 0);
-  assert.equal(settings().announcement, input.announcement);
-  issueSession(student);
-  assert.throws(() => revokeUserSessions(teacher, student), code('forbidden'));
-  revokeUserSessions(admin, student);
+  await assert.rejects(async () => await saveSettings(teacher, input), code('forbidden'));
+  await saveSettings(admin, input);
+  assert.equal((await settings()).registration_open, 0);
+  assert.equal((await settings()).announcement, input.announcement);
+  await issueSession(student);
+  await assert.rejects(async () => await revokeUserSessions(teacher, student), code('forbidden'));
+  await revokeUserSessions(admin, student);
   assert.equal(
-    one<{ n: number }>('SELECT COUNT(*) n FROM sessions WHERE user_id = ?', student)!.n,
+    (await one<{
+      n: number;
+    }>('SELECT COUNT(*) n FROM sessions WHERE user_id = ?', student))!.n,
     0,
   );
 });
@@ -298,10 +360,12 @@ test('Login return paths allow only local invitation URLs', () => {
   ])
     assert.equal(safeReturnPath(input), '');
 });
-test('Demoting an inactive teacher also resets their old approved application', () => {
-  const id = user('teacher');
-  const email = one<{ email: string }>('SELECT email FROM users WHERE id = ?', id)!.email;
-  run(
+test('Demoting an inactive teacher also resets their old approved application', async () => {
+  const id = await user('teacher');
+  const email = (await one<{
+    email: string;
+  }>('SELECT email FROM users WHERE id = ?', id))!.email;
+  await run(
     'INSERT INTO teacher_applications (id, user_id, bio, status, created_at) VALUES (?, ?, ?, ?, ?)',
     randomUUID(),
     id,
@@ -309,7 +373,7 @@ test('Demoting an inactive teacher also resets their old approved application', 
     'approved',
     Date.now(),
   );
-  updateUser(admin, id, {
+  await updateUser(admin, id, {
     name: 'Студент',
     email,
     role: 'student',
@@ -318,8 +382,9 @@ test('Demoting an inactive teacher also resets their old approved application', 
     academic_title: '',
   });
   assert.equal(
-    one<{ status: string }>('SELECT status FROM teacher_applications WHERE user_id = ?', id)!
-      .status,
+    (await one<{
+      status: string;
+    }>('SELECT status FROM teacher_applications WHERE user_id = ?', id))!.status,
     'rejected',
   );
 });

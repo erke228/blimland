@@ -54,18 +54,6 @@ export function CourseFields({ course }: { course?: Course }) {
           </select>
         </label>
       </div>
-      <label>
-        Бағасы, ₸
-        <input
-          type="number"
-          name="price"
-          min={0}
-          max={10000000}
-          defaultValue={course?.price_kzt || 0}
-          required
-        />
-        <small>Тегін курс үшін 0. Ақылы курсқа төлем қабылдау әзірге қосылмаған.</small>
-      </label>
     </>
   );
 }

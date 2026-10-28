@@ -2,7 +2,6 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { all, one, run, transaction } from './db';
 import { tokenHash } from './security';
-
 export class ManagementError extends Error {
   constructor(public code: string) {
     super(code);
@@ -34,11 +33,11 @@ export type Settings = {
   announcement: string;
   registration_open: number;
 };
-export function settings(): Settings {
+export async function settings(): Promise<Settings> {
   return (
-    one<Settings>(
+    (await one<Settings>(
       'SELECT site_name, institution_name, announcement, registration_open FROM platform_settings WHERE id = 1',
-    ) || {
+    )) || {
       site_name: 'BilimHub',
       institution_name: 'Университет',
       announcement: '',
@@ -46,14 +45,14 @@ export function settings(): Settings {
     }
   );
 }
-export function actor(id: string, roles: Actor['role'][] = ['student', 'teacher', 'admin']) {
-  const user = one<Actor>('SELECT id, name, email, role, status FROM users WHERE id = ?', id);
+export async function actor(id: string, roles: Actor['role'][] = ['student', 'teacher', 'admin']) {
+  const user = await one<Actor>('SELECT id, name, email, role, status FROM users WHERE id = ?', id);
   if (!user || user.status !== 'active' || !roles.includes(user.role))
     throw new ManagementError('forbidden');
   return user;
 }
-export function recordAudit(actorId: string, action: string, target: string) {
-  run(
+export async function recordAudit(actorId: string, action: string, target: string) {
+  await run(
     'INSERT INTO audit_log VALUES (?, ?, ?, ?, ?)',
     randomUUID(),
     actorId,
@@ -71,15 +70,15 @@ const groupSelect = `SELECT g.*, u.name teacher,
   (SELECT COUNT(*) FROM group_members m WHERE m.group_id = g.id) member_count,
   (SELECT COUNT(*) FROM group_courses c WHERE c.group_id = g.id) course_count
   FROM academic_groups g JOIN users u ON u.id = g.owner_id`;
-export function listGroups(actorId: string) {
-  const user = actor(actorId, ['teacher', 'admin']);
+export async function listGroups(actorId: string) {
+  const user = await actor(actorId, ['teacher', 'admin']);
   return user.role === 'admin'
-    ? all<Group>(`${groupSelect} ORDER BY g.created_at DESC`)
-    : all<Group>(`${groupSelect} WHERE g.owner_id = ? ORDER BY g.created_at DESC`, user.id);
+    ? await all<Group>(`${groupSelect} ORDER BY g.created_at DESC`)
+    : await all<Group>(`${groupSelect} WHERE g.owner_id = ? ORDER BY g.created_at DESC`, user.id);
 }
-export function managedGroup(actorId: string, groupId: string) {
-  const user = actor(actorId, ['teacher', 'admin']);
-  const group = one<Group>(`${groupSelect} WHERE g.id = ?`, groupId);
+export async function managedGroup(actorId: string, groupId: string) {
+  const user = await actor(actorId, ['teacher', 'admin']);
+  const group = await one<Group>(`${groupSelect} WHERE g.id = ?`, groupId);
   if (!group || (user.role !== 'admin' && group.owner_id !== user.id))
     throw new ManagementError('forbidden');
   return group;
@@ -94,16 +93,16 @@ export const groupInput = z.object({
   semester: z.coerce.number().int().min(1).max(3),
   description: z.string().trim().max(2000),
 });
-export function saveGroup(actorId: string, input: unknown, groupId?: string) {
-  const user = actor(actorId, ['teacher', 'admin']);
+export async function saveGroup(actorId: string, input: unknown, groupId?: string) {
+  const user = await actor(actorId, ['teacher', 'admin']);
   const parsed = groupInput.safeParse(input);
   if (!parsed.success) throw new ManagementError('groupform');
   const data = parsed.data;
   const id = groupId || randomUUID();
-  transaction(() => {
+  await transaction(async () => {
     if (groupId) {
-      managedGroup(actorId, groupId);
-      run(
+      await managedGroup(actorId, groupId);
+      await run(
         'UPDATE academic_groups SET name = ?, department = ?, academic_year = ?, semester = ?, description = ? WHERE id = ?',
         data.name,
         data.department,
@@ -113,7 +112,7 @@ export function saveGroup(actorId: string, input: unknown, groupId?: string) {
         id,
       );
     } else
-      run(
+      await run(
         'INSERT INTO academic_groups VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
         id,
         user.id,
@@ -125,62 +124,75 @@ export function saveGroup(actorId: string, input: unknown, groupId?: string) {
         'active',
         Date.now(),
       );
-    recordAudit(user.id, groupId ? 'group.updated' : 'group.created', id);
+    await recordAudit(user.id, groupId ? 'group.updated' : 'group.created', id);
   });
   return id;
 }
-export function groupStatus(actorId: string, groupId: string, status: string) {
-  managedGroup(actorId, groupId);
+export async function groupStatus(actorId: string, groupId: string, status: string) {
+  await managedGroup(actorId, groupId);
   if (!['active', 'archived'].includes(status)) throw new ManagementError('invalid');
-  transaction(() => {
-    run('UPDATE academic_groups SET status = ? WHERE id = ?', status, groupId);
+  await transaction(async () => {
+    await run('UPDATE academic_groups SET status = ? WHERE id = ?', status, groupId);
     if (status === 'archived')
-      run(
+      await run(
         'UPDATE group_invites SET revoked_at = ? WHERE group_id = ? AND revoked_at IS NULL',
         Date.now(),
         groupId,
       );
-    recordAudit(actorId, `group.${status}`, groupId);
+    await recordAudit(actorId, `group.${status}`, groupId);
   });
 }
-export function assignCourse(actorId: string, groupId: string, courseId: string, remove = false) {
-  const group = managedGroup(actorId, groupId);
-  const user = actor(actorId);
+export async function assignCourse(
+  actorId: string,
+  groupId: string,
+  courseId: string,
+  remove = false,
+) {
+  const group = await managedGroup(actorId, groupId);
+  const user = await actor(actorId);
   if (group.status !== 'active') throw new ManagementError('archivedgroup');
-  transaction(() => {
+  await transaction(async () => {
     if (remove)
-      run('DELETE FROM group_courses WHERE group_id = ? AND course_id = ?', groupId, courseId);
-    else {
-      const course = one<{ owner_id: string; status: string; price_kzt: number }>(
-        'SELECT owner_id, status, price_kzt FROM courses WHERE id = ?',
+      await run(
+        'DELETE FROM group_courses WHERE group_id = ? AND course_id = ?',
+        groupId,
         courseId,
       );
+    else {
+      const course = await one<{
+        owner_id: string;
+        status: string;
+      }>('SELECT owner_id, status FROM courses WHERE id = ?', courseId);
       if (
         !course ||
         course.status !== 'published' ||
         (user.role !== 'admin' && course.owner_id !== actorId)
       )
         throw new ManagementError('forbidden');
-      if (course.price_kzt !== 0) throw new ManagementError('payment');
-      run('INSERT OR IGNORE INTO group_courses VALUES (?, ?, ?)', groupId, courseId, Date.now());
-      run(
+      await run(
+        'INSERT OR IGNORE INTO group_courses VALUES (?, ?, ?)',
+        groupId,
+        courseId,
+        Date.now(),
+      );
+      await run(
         `INSERT OR IGNORE INTO enrollments (user_id, course_id, created_at) SELECT m.user_id, ?, ? FROM group_members m JOIN users u ON u.id = m.user_id WHERE m.group_id = ? AND u.status = 'active'`,
         courseId,
         Date.now(),
         groupId,
       );
     }
-    recordAudit(actorId, remove ? 'group.course_removed' : 'group.course_assigned', groupId);
+    await recordAudit(actorId, remove ? 'group.course_removed' : 'group.course_assigned', groupId);
   });
 }
-export function newInvite(actorId: string, groupId: string, days: number, maxUses: number) {
-  const group = managedGroup(actorId, groupId);
+export async function newInvite(actorId: string, groupId: string, days: number, maxUses: number) {
+  const group = await managedGroup(actorId, groupId);
   if (group.status !== 'active') throw new ManagementError('archivedgroup');
   if (![1, 7, 30].includes(days) || !Number.isInteger(maxUses) || maxUses < 1 || maxUses > 5000)
     throw new ManagementError('invalid');
   const token = randomBytes(24).toString('hex');
-  transaction(() => {
-    run(
+  await transaction(async () => {
+    await run(
       'INSERT INTO group_invites VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       randomUUID(),
       groupId,
@@ -191,25 +203,25 @@ export function newInvite(actorId: string, groupId: string, days: number, maxUse
       Date.now(),
       null,
     );
-    recordAudit(actorId, 'group.invite_created', groupId);
+    await recordAudit(actorId, 'group.invite_created', groupId);
   });
   return token;
 }
-export function revokeInvite(actorId: string, groupId: string, inviteId: string) {
-  managedGroup(actorId, groupId);
-  transaction(() => {
-    run(
+export async function revokeInvite(actorId: string, groupId: string, inviteId: string) {
+  await managedGroup(actorId, groupId);
+  await transaction(async () => {
+    await run(
       'UPDATE group_invites SET revoked_at = ? WHERE id = ? AND group_id = ?',
       Date.now(),
       inviteId,
       groupId,
     );
-    recordAudit(actorId, 'group.invite_revoked', groupId);
+    await recordAudit(actorId, 'group.invite_revoked', groupId);
   });
 }
-export function invitation(token: string) {
+export async function invitation(token: string) {
   if (!/^[a-f0-9]{48}$/.test(token)) return undefined;
-  return one<{
+  return await one<{
     id: string;
     group_id: string;
     name: string;
@@ -225,50 +237,49 @@ export function invitation(token: string) {
     Date.now(),
   );
 }
-export function acceptInvitation(actorId: string, token: string) {
-  const user = actor(actorId);
+export async function acceptInvitation(actorId: string, token: string) {
+  const user = await actor(actorId);
   if (user.role !== 'student') throw new ManagementError('studentonly');
-  return transaction(() => {
+  return await transaction(async () => {
     // Check existing membership before capacity so a repeated click never consumes a use.
     const raw = /^[a-f0-9]{48}$/.test(token)
-      ? one<{ group_id: string }>(
-          'SELECT group_id FROM group_invites WHERE token_hash = ?',
-          tokenHash(token),
-        )
+      ? await one<{
+          group_id: string;
+        }>('SELECT group_id FROM group_invites WHERE token_hash = ?', tokenHash(token))
       : undefined;
     if (
       raw &&
-      one(
+      (await one(
         'SELECT user_id FROM group_members WHERE group_id = ? AND user_id = ?',
         raw.group_id,
         user.id,
-      )
+      ))
     )
       return raw.group_id;
-    const invite = invitation(token);
+    const invite = await invitation(token);
     if (!invite) throw new ManagementError('invite');
-    run('INSERT INTO group_members VALUES (?, ?, ?)', invite.group_id, user.id, Date.now());
-    run('UPDATE group_invites SET uses = uses + 1 WHERE id = ?', invite.id);
-    run(
-      `INSERT OR IGNORE INTO enrollments (user_id, course_id, created_at) SELECT ?, c.id, ? FROM group_courses gc JOIN courses c ON c.id = gc.course_id WHERE gc.group_id = ? AND c.status = 'published' AND c.price_kzt = 0`,
+    await run('INSERT INTO group_members VALUES (?, ?, ?)', invite.group_id, user.id, Date.now());
+    await run('UPDATE group_invites SET uses = uses + 1 WHERE id = ?', invite.id);
+    await run(
+      `INSERT OR IGNORE INTO enrollments (user_id, course_id, created_at) SELECT ?, c.id, ? FROM group_courses gc JOIN courses c ON c.id = gc.course_id WHERE gc.group_id = ? AND c.status = 'published'`,
       user.id,
       Date.now(),
       invite.group_id,
     );
-    recordAudit(user.id, 'group.joined', invite.group_id);
+    await recordAudit(user.id, 'group.joined', invite.group_id);
     return invite.group_id;
   });
 }
-export function removeMember(actorId: string, groupId: string, userId: string) {
-  managedGroup(actorId, groupId);
-  transaction(() => {
-    run('DELETE FROM group_members WHERE group_id = ? AND user_id = ?', groupId, userId);
-    recordAudit(actorId, 'group.member_removed', groupId);
+export async function removeMember(actorId: string, groupId: string, userId: string) {
+  await managedGroup(actorId, groupId);
+  await transaction(async () => {
+    await run('DELETE FROM group_members WHERE group_id = ? AND user_id = ?', groupId, userId);
+    await recordAudit(actorId, 'group.member_removed', groupId);
   });
 }
-export function groupReport(actorId: string, groupId: string) {
-  managedGroup(actorId, groupId);
-  return all<{
+export async function groupReport(actorId: string, groupId: string) {
+  await managedGroup(actorId, groupId);
+  return await all<{
     user_id: string;
     name: string;
     email: string;
@@ -281,14 +292,14 @@ export function groupReport(actorId: string, groupId: string) {
     total: number;
   }>(
     `SELECT u.id user_id, u.name, u.email, u.status, u.last_active_at, c.id course_id, c.title course_title, c.status course_status,
-    (SELECT COUNT(*) FROM lesson_progress p JOIN lessons l ON l.id = p.lesson_id JOIN sections s ON s.id = l.section_id WHERE p.user_id = u.id AND s.course_id = c.id AND p.completed_at IS NOT NULL) completed,
-    (SELECT COUNT(*) FROM lessons l JOIN sections s ON s.id = l.section_id WHERE s.course_id = c.id) total
+    (SELECT COUNT(*) FROM lesson_progress p JOIN lessons l ON l.id = p.lesson_id JOIN sections s ON s.id = l.section_id WHERE p.user_id = u.id AND s.course_id = c.id AND NOT EXISTS(SELECT 1 FROM section_trash t WHERE t.section_id=s.id) AND p.completed_at IS NOT NULL) completed,
+    (SELECT COUNT(*) FROM lessons l JOIN sections s ON s.id = l.section_id WHERE s.course_id = c.id AND NOT EXISTS(SELECT 1 FROM section_trash t WHERE t.section_id=s.id)) total
     FROM group_members m JOIN users u ON u.id = m.user_id LEFT JOIN group_courses gc ON gc.group_id = m.group_id LEFT JOIN courses c ON c.id = gc.course_id WHERE m.group_id = ? ORDER BY u.name, c.title`,
     groupId,
   );
 }
-export function updateUser(actorId: string, targetId: string, input: unknown) {
-  actor(actorId, ['admin']);
+export async function updateUser(actorId: string, targetId: string, input: unknown) {
+  await actor(actorId, ['admin']);
   const parsed = z
     .object({
       name: z.string().trim().min(2).max(80),
@@ -304,29 +315,32 @@ export function updateUser(actorId: string, targetId: string, input: unknown) {
     .safeParse(input);
   if (!parsed.success) throw new ManagementError('userform');
   const data = parsed.data;
-  transaction(() => {
-    const target = one<Actor>('SELECT id, role, status, email FROM users WHERE id = ?', targetId);
+  await transaction(async () => {
+    const target = await one<Actor>(
+      'SELECT id, role, status, email FROM users WHERE id = ?',
+      targetId,
+    );
     if (!target) throw new ManagementError('invalid');
     if (target.role === 'admin' && (data.role !== 'admin' || data.status !== 'active'))
       throw new ManagementError('ownerprotected');
     if (target.role !== 'admin' && data.role === 'admin')
       throw new ManagementError('ownerprotected');
-    if (one('SELECT id FROM users WHERE email = ? AND id != ?', data.email, targetId))
+    if (await one('SELECT id FROM users WHERE email = ? AND id != ?', data.email, targetId))
       throw new ManagementError('email');
     if (
       target.role === 'teacher' &&
       data.role === 'student' &&
-      (one(
+      ((await one(
         "SELECT id FROM courses WHERE owner_id = ? AND status != 'archived' LIMIT 1",
         targetId,
-      ) ||
-        one(
+      )) ||
+        (await one(
           "SELECT id FROM academic_groups WHERE owner_id = ? AND status = 'active' LIMIT 1",
           targetId,
-        ))
+        )))
     )
       throw new ManagementError('ownership');
-    run(
+    await run(
       'UPDATE users SET name = ?, email = ?, role = ?, status = ?, department = ?, academic_title = ?, updated_at = ? WHERE id = ?',
       data.name,
       data.email,
@@ -338,27 +352,27 @@ export function updateUser(actorId: string, targetId: string, input: unknown) {
       targetId,
     );
     if (target.role !== data.role || target.status !== data.status || target.email !== data.email)
-      run('DELETE FROM sessions WHERE user_id = ?', targetId);
+      await run('DELETE FROM sessions WHERE user_id = ?', targetId);
     if (data.role === 'teacher')
-      run(
+      await run(
         "UPDATE teacher_applications SET status = 'approved', reviewed_by = ?, reviewed_at = ? WHERE user_id = ?",
         actorId,
         Date.now(),
         targetId,
       );
     if (target.role === 'teacher' && data.role === 'student')
-      run(
+      await run(
         "UPDATE teacher_applications SET status = 'rejected', review_note = ?, reviewed_by = ?, reviewed_at = ? WHERE user_id = ?",
         'Оқытушы мәртебесі әкімші тарапынан өзгертілді.',
         actorId,
         Date.now(),
         targetId,
       );
-    recordAudit(actorId, 'user.updated', targetId);
+    await recordAudit(actorId, 'user.updated', targetId);
   });
 }
-export function updateOwnProfile(actorId: string, input: unknown) {
-  const user = actor(actorId);
+export async function updateOwnProfile(actorId: string, input: unknown) {
+  const user = await actor(actorId);
   const parsed = z
     .object({
       name: z.string().trim().min(2).max(80),
@@ -368,7 +382,7 @@ export function updateOwnProfile(actorId: string, input: unknown) {
     .safeParse(input);
   if (!parsed.success) throw new ManagementError('userform');
   const data = parsed.data;
-  run(
+  await run(
     'UPDATE users SET name = ?, department = ?, academic_title = ?, updated_at = ? WHERE id = ?',
     data.name,
     data.department,
@@ -376,18 +390,19 @@ export function updateOwnProfile(actorId: string, input: unknown) {
     Date.now(),
     user.id,
   );
-  recordAudit(actorId, 'profile.updated', actorId);
+  await recordAudit(actorId, 'profile.updated', actorId);
 }
-export function revokeUserSessions(actorId: string, targetId: string) {
-  actor(actorId, ['admin']);
-  if (!one('SELECT id FROM users WHERE id = ?', targetId)) throw new ManagementError('invalid');
-  transaction(() => {
-    run('DELETE FROM sessions WHERE user_id = ?', targetId);
-    recordAudit(actorId, 'user.sessions_revoked', targetId);
+export async function revokeUserSessions(actorId: string, targetId: string) {
+  await actor(actorId, ['admin']);
+  if (!(await one('SELECT id FROM users WHERE id = ?', targetId)))
+    throw new ManagementError('invalid');
+  await transaction(async () => {
+    await run('DELETE FROM sessions WHERE user_id = ?', targetId);
+    await recordAudit(actorId, 'user.sessions_revoked', targetId);
   });
 }
-export function saveSettings(actorId: string, input: unknown) {
-  actor(actorId, ['admin']);
+export async function saveSettings(actorId: string, input: unknown) {
+  await actor(actorId, ['admin']);
   const parsed = z
     .object({
       site_name: z.string().trim().min(2).max(40),
@@ -398,8 +413,8 @@ export function saveSettings(actorId: string, input: unknown) {
     .safeParse(input);
   if (!parsed.success) throw new ManagementError('invalid');
   const d = parsed.data;
-  transaction(() => {
-    run(
+  await transaction(async () => {
+    await run(
       `INSERT INTO platform_settings VALUES (1, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET site_name = excluded.site_name, institution_name = excluded.institution_name, announcement = excluded.announcement, registration_open = excluded.registration_open, updated_at = excluded.updated_at, updated_by = excluded.updated_by`,
       d.site_name,
       d.institution_name,
@@ -408,6 +423,6 @@ export function saveSettings(actorId: string, input: unknown) {
       Date.now(),
       actorId,
     );
-    recordAudit(actorId, 'site.settings_updated', 'platform');
+    await recordAudit(actorId, 'site.settings_updated', 'platform');
   });
 }

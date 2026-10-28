@@ -11,30 +11,37 @@ import { VideoPlayer } from '@/components/video-player';
 import { listMaterials } from '@/lib/materials';
 import { DocumentMaterials } from '@/components/document-materials';
 import { lectureCoverPresentation } from '@/lib/course-covers';
+import { MobileDisclosure } from '@/components/mobile-disclosure';
 export default async function Learn({
   params,
   searchParams,
 }: {
-  params: Promise<{ id: string }>;
-  searchParams: Promise<{ success?: string }>;
+  params: Promise<{
+    id: string;
+  }>;
+  searchParams: Promise<{
+    success?: string;
+  }>;
 }) {
   const { id } = await params;
-  const lesson = one<Lesson>(
+  const lesson = await one<Lesson>(
     "SELECT l.*, s.course_id, s.title AS section_title, COALESCE(d.summary,'') summary, COALESCE(d.objectives,'') objectives FROM lessons l JOIN sections s ON s.id = l.section_id LEFT JOIN lesson_details d ON d.lesson_id=l.id WHERE l.id = ?",
     id,
   );
   if (!lesson) notFound();
-  const course = getCourse(lesson.course_id)!;
+  if (await one('SELECT section_id FROM section_trash WHERE section_id=?', lesson.section_id))
+    notFound();
+  const course = (await getCourse(lesson.course_id))!;
   const user = await currentUser();
   const owner = !!user && (course.owner_id === user.id || user.role === 'admin');
   if (course.status !== 'published' && !owner) notFound();
   const enrolled =
     !!user &&
-    !!one(
+    !!(await one(
       'SELECT user_id FROM enrollments WHERE course_id = ? AND user_id = ?',
       course.id,
       user.id,
-    );
+    ));
   if (!owner && !enrolled && !lesson.is_preview)
     return (
       <div className="empty-state">
@@ -46,17 +53,18 @@ export default async function Learn({
         </Link>
       </div>
     );
-  const lessons = courseLessons(course.id);
+  const lessons = await courseLessons(course.id);
   const index = lessons.findIndex((item) => item.id === id);
   const next = lessons[index + 1];
+  const previous = lessons[index - 1];
   const done =
     !!user &&
-    !!one(
+    !!(await one(
       'SELECT lesson_id FROM lesson_progress WHERE user_id = ? AND lesson_id = ? AND completed_at IS NOT NULL',
       user.id,
       id,
-    );
-  const materials = listMaterials(id, user?.id);
+    ));
+  const materials = await listMaterials(id, user?.id);
   const body = lesson.body
     .split('\n\n')
     .filter(Boolean)
@@ -67,7 +75,7 @@ export default async function Learn({
         <ArrowLeft size={16} />
         {course.title}
       </Link>
-      <div className="learning-grid">
+      <div className="learning-grid student-reading">
         <article>
           <span className="eyebrow">
             {lesson.section_title} · {index + 1}/{lessons.length} САБАҚ
@@ -84,7 +92,7 @@ export default async function Learn({
           )}
           <Notice {...await searchParams} />
           <div className="lecture-header-cover">
-            <CourseCover course={{ ...course, ...lectureCoverPresentation(id) }} large />
+            <CourseCover course={{ ...course, ...(await lectureCoverPresentation(id)) }} large />
           </div>
           {lesson.summary && <p className="lecture-summary">{lesson.summary}</p>}
           {lesson.objectives && (
@@ -134,27 +142,39 @@ export default async function Learn({
                 Келесі сабақ <ArrowRight size={16} />
               </Link>
             )}
+            {previous && (enrolled || owner || previous.is_preview) && (
+              <Link href={`/learn/${previous.id}`} className="button outline">
+                <ArrowLeft size={16} />
+                Алдыңғы сабақ
+              </Link>
+            )}
           </div>
         </article>
         <aside className="panel learning-sidebar">
-          <h3>Курс сабақтары</h3>
-          {lessons.map((item, i) =>
-            enrolled || owner || item.is_preview ? (
-              <Link
-                key={item.id}
-                className={`lesson-nav ${item.id === id ? 'selected' : ''}`}
-                href={`/learn/${item.id}`}
-              >
-                <span>{i + 1}</span>
-                {item.title}
-              </Link>
-            ) : (
-              <div className="lesson-nav muted" key={item.id}>
-                <LockKeyhole size={15} />
-                {item.title}
-              </div>
-            ),
-          )}
+          <MobileDisclosure
+            title="Курс сабақтары"
+            summary={`${index + 1} / ${lessons.length} сабақ`}
+            desktopHeading
+            className="lesson-outline"
+          >
+            {lessons.map((item, i) =>
+              enrolled || owner || item.is_preview ? (
+                <Link
+                  key={item.id}
+                  className={`lesson-nav ${item.id === id ? 'selected' : ''}`}
+                  href={`/learn/${item.id}`}
+                >
+                  <span>{i + 1}</span>
+                  {item.title}
+                </Link>
+              ) : (
+                <div className="lesson-nav muted" key={item.id}>
+                  <LockKeyhole size={15} />
+                  {item.title}
+                </div>
+              ),
+            )}
+          </MobileDisclosure>
         </aside>
       </div>
     </>

@@ -1,3 +1,3 @@
 import { migrate } from '../src/lib/db';
-migrate();
+await migrate();
 console.log('Database migrations applied.');

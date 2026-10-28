@@ -125,7 +125,7 @@ function PdfPages({ src, title }: { src: string; title: string }) {
             <ChevronLeft size={17} />
           </button>
           <label>
-            Бет{' '}
+            <span className="pdf-page-word">Бет</span>{' '}
             <select
               aria-label="Бет нөмірі"
               value={page}

@@ -1,24 +1,25 @@
 import { randomBytes, randomUUID } from 'node:crypto';
-import { migrate, one, run } from '../src/lib/db';
+import { migrate, one, run, usesPostgres } from '../src/lib/db';
+import { loadEnvironment } from './postgres-environment';
 import { hashPassword } from '../src/lib/security';
-
 const email = process.argv[2]?.trim().toLowerCase();
 const name = process.argv[3] || 'Платформа әкімшісі';
 if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
   console.error('Usage: npm run admin:create -- email@example.kz "Name"');
   process.exit(1);
 }
-migrate();
-if (one("SELECT id FROM users WHERE role = 'admin'")) {
+loadEnvironment();
+if(!usesPostgres()) await migrate();
+if (await one("SELECT id FROM users WHERE role = 'admin'")) {
   console.error('The super administrator already exists. A second owner cannot be created.');
   process.exit(1);
 }
-if (one('SELECT id FROM users WHERE email = ?', email)) {
+if (await one('SELECT id FROM users WHERE email = ?', email)) {
   console.error('Account already exists. No roles or credentials changed.');
   process.exit(1);
 }
 const password = randomBytes(18).toString('base64url');
-run(
+await run(
   'INSERT INTO users (id, email, name, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?, ?)',
   randomUUID(),
   email,

@@ -5,7 +5,10 @@ import { GroupList } from '@/components/group-list';
 export default async function Groups({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; success?: string }>;
+  searchParams: Promise<{
+    error?: string;
+    success?: string;
+  }>;
 }) {
   const user = await requireRole('teacher', 'admin');
   return (

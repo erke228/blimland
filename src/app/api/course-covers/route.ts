@@ -1,16 +1,15 @@
 import { NextResponse } from 'next/server';
+import { sameOrigin, requestOrigin } from '@/lib/http-upload';
 import { currentUser } from '@/lib/auth';
 import { managedCourse, managedLectureCover } from '@/lib/course-editor';
 import { MAX_COVER_BYTES, uploadCourseCover } from '@/lib/course-covers';
 import { ManagementError } from '@/lib/management';
-
 export const runtime = 'nodejs';
 export async function POST(request: Request) {
   const user = await currentUser();
   if (!user) return new Response('Unauthorized', { status: 401 });
   if (!['teacher', 'admin'].includes(user.role)) return new Response('Forbidden', { status: 403 });
-  if (request.headers.get('origin') !== (process.env.APP_ORIGIN || new URL(request.url).origin))
-    return new Response('Forbidden', { status: 403 });
+  if (!sameOrigin(request)) return new Response('Forbidden', { status: 403 });
   const limit = MAX_COVER_BYTES + 64 * 1024;
   if (Number(request.headers.get('content-length') || 0) > limit)
     return new Response('5 МБ лимиті', { status: 413 });
@@ -37,8 +36,8 @@ export async function POST(request: Request) {
     }).formData();
     courseId = String(form.get('courseId') || '');
     lessonId = String(form.get('lessonId') || '');
-    managedCourse(user.id, courseId, false);
-    if (lessonId) managedLectureCover(user.id, courseId, lessonId);
+    await managedCourse(user.id, courseId, false);
+    if (lessonId) await managedLectureCover(user.id, courseId, lessonId);
     const file = form.get('file');
     if (!(file instanceof File)) throw new ManagementError('coverinvalid');
     await uploadCourseCover(
@@ -49,8 +48,8 @@ export async function POST(request: Request) {
     );
     return NextResponse.redirect(
       new URL(
-        `/teacher/courses/${courseId}?success=saved${lessonId ? `&lesson=${lessonId}#lecture-cover` : '#cover'}`,
-        request.url,
+        `/teacher/courses/${courseId}?tab=cover&success=saved${lessonId ? `&lesson=${lessonId}#lecture-cover` : '#cover'}`,
+        requestOrigin(request),
       ),
       303,
     );
@@ -60,8 +59,8 @@ export async function POST(request: Request) {
     if (!/^[a-zA-Z0-9-]+$/.test(courseId)) return new Response('Invalid course', { status: 400 });
     return NextResponse.redirect(
       new URL(
-        `/teacher/courses/${courseId}?error=${error.code}${/^[a-zA-Z0-9-]+$/.test(lessonId) ? `&lesson=${lessonId}#lecture-cover` : '#cover'}`,
-        request.url,
+        `/teacher/courses/${courseId}?tab=cover&error=${error.code}${/^[a-zA-Z0-9-]+$/.test(lessonId) ? `&lesson=${lessonId}#lecture-cover` : '#cover'}`,
+        requestOrigin(request),
       ),
       303,
     );

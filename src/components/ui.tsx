@@ -1,7 +1,6 @@
 import Link from 'next/link';
 import { ArrowUpRight, BookOpen } from 'lucide-react';
 import type { Course } from '@/lib/courses';
-import { money } from '@/lib/courses';
 import { CoverIllustration } from './cover-illustration';
 
 export function CourseCover({
@@ -66,9 +65,6 @@ export function CourseCard({ course, progress }: { course: Course; progress?: nu
             <BookOpen size={15} />
             {course.lesson_count} сабақ
           </span>
-          <strong className={course.price_kzt === 0 ? 'free' : ''}>
-            {money(course.price_kzt)}
-          </strong>
         </div>
         {progress !== undefined && (
           <div className="course-progress">
@@ -139,11 +135,20 @@ export function Notice({ error, success }: { error?: string; success?: string })
     credentials: 'Email немесе құпиясөз дұрыс емес.',
     rate: 'Тым көп әрекет жасалды. Кейінірек қайталаңыз.',
     forbidden: 'Бұл әрекетті орындауға рұқсатыңыз жоқ.',
+    coursetrashed: 'Курс себетте. Өңдеу үшін алдымен жобаға қайтарыңыз.',
+    purgeconfirmation:
+      'Курсты алдымен себетке жіберіңіз. Толық жою үшін атауын дәл жазып, растау белгісін қойыңыз.',
+    currentpassword: 'Ағымдағы құпиясөз дұрыс емес.',
+    newpassword:
+      'Жаңа құпиясөз кемінде 12 таңба болуы және қайталанған нұсқасымен сәйкес келуі тиіс.',
+    profilewebsite: 'Сайт сілтемесі http:// немесе https:// арқылы басталуы тиіс.',
     bio: 'Өзіңіз туралы 20–3000 таңба жазыңыз.',
     invalid: 'Мәліметтерді тексеріп, қайта жіберіңіз.',
     courseform: 'Атау (5–140 таңба), сипаттама (30–5000 таңба), санат және дұрыс баға қажет.',
     lessonform: 'Сабақтың атауын, мәтінін немесе HTTPS бейнесілтемесін және ұзақтығын тексеріңіз.',
     emptycourse: 'Тексеруге жібермес бұрын кемінде бір сабақ қосыңыз.',
+    sectiondestination:
+      'Дәрістері бар бөлімді жою үшін осы курстағы басқа бөлімді таңдаңыз. Дәрістер мен прогресс сақталады.',
     emptylesson:
       'Әр дәріске мәтін, бейнесілтеме немесе PDF/Word құжатын қосыңыз. Бос дәрістер жарияланбайды.',
     coversize: 'Мұқаба файлы бос болмауы және 5 МБ-тан аспауы тиіс.',
@@ -156,7 +161,6 @@ export function Notice({ error, success }: { error?: string; success?: string })
     documentinvalid:
       'Құжат ашылмады: файл бүлінген, шифрланған немесе пішімі қолдау таппайды. PDF не DOCX нұсқасын тексеріңіз.',
     documentquota: 'Материалдар лимиті: бір сабаққа 10 құжат, бір жүктеушіге жалпы 500 МБ.',
-    payment: 'Төлем әлі қосылмаған. Қазір ақылы курсқа қолжетімділік сатылмайды.',
     course: 'Курс қолжетімсіз.',
     registrationclosed: 'Ашық тіркелу уақытша жабық. Университет әкімшісіне хабарласыңыз.',
     groupform: 'Топ атауын және оқу жылын (мысалы, 2026–2027) дұрыс толтырыңыз.',
@@ -170,13 +174,18 @@ export function Notice({ error, success }: { error?: string; success?: string })
   };
   const successes: Record<string, string> = {
     saved: 'Өзгерістер сақталды.',
+    coursepurged: 'Курс және оған қатысты оқу деректері толық жойылды.',
+    cleanupqueued:
+      'Курс жойылды. Кейбір файлдарды тазалау кезекте қалды; әкімші қайта тексере алады.',
+    passwordchanged: 'Құпиясөз өзгертілді. Жаңа құпиясөзбен қайта кіріңіз.',
+    emailchanged: 'Email өзгертілді. Жаңа email арқылы қайта кіріңіз.',
     documentuploaded: 'Құжат жүктелді. Ол сабақ ішінде ашылады.',
     application: 'Өтінім әкімшіге жіберілді.',
     completed: 'Сабақ оқылған ретінде белгіленді.',
     invitecreated:
       'Шақыру жасалды. Сілтемені қазір көшіріп алыңыз: ол бұл бетте 10 минут көрсетіледі.',
     revoked: 'Шақыру сілтемесі өшірілді. Бұрын қосылған студенттер топта қалады.',
-    joined: 'Оқу тобына қосылдыңыз. Тағайындалған тегін курстар кабинетіңізде ашылды.',
+    joined: 'Оқу тобына қосылдыңыз. Тағайындалған курстар кабинетіңізде ашылды.',
     removed: 'Топ мүшелігі өзгертілді. Оқу тарихы мен курсқа жазылу сақталды.',
     sessionsrevoked: 'Пайдаланушының барлық белсенді сессиялары аяқталды.',
   };

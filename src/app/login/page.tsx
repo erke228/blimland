@@ -8,7 +8,11 @@ import { safeReturnPath } from '@/lib/management';
 export default async function Login({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; next?: string }>;
+  searchParams: Promise<{
+    error?: string;
+    next?: string;
+    success?: string;
+  }>;
 }) {
   const query = await searchParams;
   const next = safeReturnPath(query.next);
@@ -29,7 +33,7 @@ export default async function Login({
       <div className="panel auth-panel">
         <h2>Қош келдіңіз!</h2>
         <p className="muted">Оқуды жалғастыру үшін аккаунтыңызға кіріңіз.</p>
-        <Notice error={error} />
+        <Notice error={error} success={query.success} />
         <form action={login} className="form-stack">
           <input type="hidden" name="next" value={next} />
           <label>

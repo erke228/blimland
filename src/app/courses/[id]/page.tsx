@@ -2,43 +2,52 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ArrowLeft, BookOpen, Clock3, CheckCircle2, LockKeyhole, PlayCircle } from 'lucide-react';
 import { currentUser } from '@/lib/auth';
-import { courseLessons, getCourse, money } from '@/lib/courses';
-import { one } from '@/lib/db';
+import { courseLessons, getCourse } from '@/lib/courses';
+import { all, one } from '@/lib/db';
 import { enroll } from '@/app/actions';
 import { CourseCover, Notice } from '@/components/ui';
 import { SubmitButton } from '@/components/submit-button';
-
+import { ExpandableDescription } from '@/components/expandable-description';
 export default async function CoursePage({
   params,
   searchParams,
 }: {
-  params: Promise<{ id: string }>;
-  searchParams: Promise<{ error?: string }>;
+  params: Promise<{
+    id: string;
+  }>;
+  searchParams: Promise<{
+    error?: string;
+  }>;
 }) {
   const { id } = await params;
-  const course = getCourse(id);
+  const course = await getCourse(id);
   const user = await currentUser();
   if (
     !course ||
     (course.status !== 'published' && user?.id !== course.owner_id && user?.role !== 'admin')
   )
     notFound();
-  const lessons = courseLessons(id);
+  const lessons = await courseLessons(id);
   const enrolled =
     !!user &&
-    !!one('SELECT user_id FROM enrollments WHERE user_id = ? AND course_id = ?', user.id, id);
+    !!(await one(
+      'SELECT user_id FROM enrollments WHERE user_id = ? AND course_id = ?',
+      user.id,
+      id,
+    ));
   const owner = !!user && (user.id === course.owner_id || user.role === 'admin');
   const accessible = enrolled || owner;
-  const first =
-    lessons.find(
-      (lesson) =>
-        !user ||
-        !one(
-          'SELECT lesson_id FROM lesson_progress WHERE user_id = ? AND lesson_id = ? AND completed_at IS NOT NULL',
-          user.id,
-          lesson.id,
-        ),
-    ) || lessons[0];
+  const completed = new Set(
+    user
+      ? (
+          await all<{ lesson_id: string }>(
+            'SELECT lesson_id FROM lesson_progress WHERE user_id=? AND completed_at IS NOT NULL',
+            user.id,
+          )
+        ).map((row) => row.lesson_id)
+      : [],
+  );
+  const first = lessons.find((lesson) => !completed.has(lesson.id)) || lessons[0];
   return (
     <>
       <Link className="back-link" href="/courses">
@@ -50,69 +59,80 @@ export default async function CoursePage({
         <div className="notice">Бұл — жарияланбаған курстың алдын ала көрінісі.</div>
       )}
       <div className="course-detail-grid">
-        <div>
-          <span className="eyebrow">
-            {course.category} · {course.level}
-          </span>
-          <h1 className="detail-title">{course.title}</h1>
-          <p className="detail-description">{course.description}</p>
-          <div className="detail-meta">
-            <span className="teacher-line">
-              <span className="tiny-avatar">{course.teacher[0]}</span>
-              {course.teacher}
+        <div className="course-detail-main">
+          <div className="course-intro">
+            <span className="eyebrow">
+              {course.category} · {course.level}
             </span>
-            <span>
-              <BookOpen size={16} />
-              {lessons.length} сабақ
-            </span>
-            <span>
-              <Clock3 size={16} />
-              {lessons.reduce((n, l) => n + l.duration_minutes, 0)} мин
-            </span>
+            <h1 className="detail-title">{course.title}</h1>
+            <ExpandableDescription text={course.description} />
+            <div className="detail-meta">
+              <span className="teacher-line">
+                <span className="tiny-avatar">{course.teacher[0]}</span>
+                {course.teacher}
+              </span>
+              <span>
+                <BookOpen size={16} />
+                {lessons.length} сабақ
+              </span>
+              <span>
+                <Clock3 size={16} />
+                {lessons.reduce((n, l) => n + l.duration_minutes, 0)} мин
+              </span>
+            </div>
           </div>
           <div className="course-program">
             <h2>Курс бағдарламасы</h2>
-            {[...new Set(lessons.map((l) => l.section_id))].map((section) => (
-              <div className="program-section" key={section}>
-                <h3>{lessons.find((l) => l.section_id === section)!.section_title}</h3>
-                {lessons
-                  .filter((l) => l.section_id === section)
-                  .map((lesson, i) => {
-                    const canOpen =
-                      accessible || (course.status === 'published' && !!lesson.is_preview);
-                    const done =
-                      !!user &&
-                      !!one(
-                        'SELECT lesson_id FROM lesson_progress WHERE user_id = ? AND lesson_id = ? AND completed_at IS NOT NULL',
-                        user.id,
-                        lesson.id,
-                      );
-                    const content = (
-                      <>
-                        <span className={`lesson-number ${done ? 'done' : ''}`}>
-                          {done ? <CheckCircle2 size={17} /> : String(i + 1).padStart(2, '0')}
-                        </span>
-                        <div>
-                          <strong>{lesson.title}</strong>
-                          <span>
-                            {lesson.duration_minutes} мин{lesson.is_preview ? ' · Ашық сабақ' : ''}
-                          </span>
-                        </div>
-                        {canOpen ? <PlayCircle size={20} /> : <LockKeyhole size={18} />}
-                      </>
-                    );
-                    return canOpen ? (
-                      <Link className="program-lesson" key={lesson.id} href={`/learn/${lesson.id}`}>
-                        {content}
-                      </Link>
-                    ) : (
-                      <div className="program-lesson locked" key={lesson.id}>
-                        {content}
-                      </div>
-                    );
-                  })}
-              </div>
-            ))}
+            {await Promise.all(
+              [...new Set(lessons.map((l) => l.section_id))].map(async (section) => (
+                <div className="program-section" key={section}>
+                  <h3>{lessons.find((l) => l.section_id === section)!.section_title}</h3>
+                  {await Promise.all(
+                    lessons
+                      .filter((l) => l.section_id === section)
+                      .map(async (lesson, i) => {
+                        const canOpen =
+                          accessible || (course.status === 'published' && !!lesson.is_preview);
+                        const done =
+                          !!user &&
+                          !!(await one(
+                            'SELECT lesson_id FROM lesson_progress WHERE user_id = ? AND lesson_id = ? AND completed_at IS NOT NULL',
+                            user.id,
+                            lesson.id,
+                          ));
+                        const content = (
+                          <>
+                            <span className={`lesson-number ${done ? 'done' : ''}`}>
+                              {done ? <CheckCircle2 size={17} /> : String(i + 1).padStart(2, '0')}
+                            </span>
+                            <div>
+                              <strong>{lesson.title}</strong>
+                              <span>
+                                {lesson.duration_minutes} мин
+                                {lesson.is_preview ? ' · Ашық сабақ' : ''}
+                              </span>
+                            </div>
+                            {canOpen ? <PlayCircle size={20} /> : <LockKeyhole size={18} />}
+                          </>
+                        );
+                        return canOpen ? (
+                          <Link
+                            className="program-lesson"
+                            key={lesson.id}
+                            href={`/learn/${lesson.id}`}
+                          >
+                            {content}
+                          </Link>
+                        ) : (
+                          <div className="program-lesson locked" key={lesson.id}>
+                            {content}
+                          </div>
+                        );
+                      }),
+                  )}
+                </div>
+              )),
+            )}
             {!lessons.length && <p className="muted">Сабақтар әлі қосылмаған.</p>}
           </div>
         </div>
@@ -120,7 +140,6 @@ export default async function CoursePage({
           <CourseCover course={course} large />
           <div className="enrollment-content">
             <span className="eyebrow">КУРСҚА ҚОЛЖЕТІМДІЛІК</span>
-            <strong className="price">{money(course.price_kzt)}</strong>
             {accessible && first ? (
               <Link className="button primary full-width" href={`/learn/${first.id}`}>
                 Оқуды жалғастыру →
@@ -131,17 +150,11 @@ export default async function CoursePage({
               <Link href="/login" className="button primary full-width">
                 Кіру және жазылу →
               </Link>
-            ) : course.price_kzt === 0 ? (
+            ) : (
               <form action={enroll}>
                 <input type="hidden" name="courseId" value={course.id} />
-                <SubmitButton className="button primary full-width">
-                  Курсқа тегін жазылу →
-                </SubmitButton>
+                <SubmitButton className="button primary full-width">Курсқа жазылу →</SubmitButton>
               </form>
-            ) : (
-              <div className="notice">
-                Төлем қызметі әзірге қосылмаған. Бұл курс сатылымға ашылмайды.
-              </div>
             )}
             <ul className="included">
               <li>

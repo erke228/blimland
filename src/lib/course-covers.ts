@@ -1,13 +1,12 @@
 import sharp from 'sharp';
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, writeFile, unlink } from 'node:fs/promises';
+import { putStored, getStored, deleteStored } from './storage';
 import { resolve } from 'node:path';
 import { one, run } from './db';
 import { managedCourse, managedLectureCover } from './course-editor';
 import { actor, ManagementError, recordAudit } from './management';
-
 export const MAX_COVER_BYTES = 5 * 1024 * 1024;
-function coverPath(key: string) {
+export function coverPath(key: string) {
   if (!/^[a-f0-9-]{36}\.webp$/.test(key)) throw new ManagementError('coverinvalid');
   return resolve(/* turbopackIgnore: true */ process.env.UPLOAD_DIR || './uploads', 'covers', key);
 }
@@ -17,11 +16,11 @@ export async function uploadCourseCover(
   bytes: Buffer,
   lessonId?: string,
 ) {
-  const check = () =>
+  const check = async () =>
     lessonId
-      ? managedLectureCover(actorId, courseId, lessonId)
-      : managedCourse(actorId, courseId, false);
-  check();
+      ? await managedLectureCover(actorId, courseId, lessonId)
+      : await managedCourse(actorId, courseId, false);
+  await check();
   if (!bytes.length || bytes.length > MAX_COVER_BYTES) throw new ManagementError('coversize');
   const raster =
     bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])) ||
@@ -44,45 +43,50 @@ export async function uploadCourseCover(
   }
   const key = `${randomUUID()}.webp`;
   const path = coverPath(key);
-  await mkdir(resolve(/* turbopackIgnore: true */ path, '..'), { recursive: true });
-  await writeFile(/* turbopackIgnore: true */ path, output, { flag: 'wx' });
+  await putStored(`covers/${key}`, path, output, 'image/webp');
   try {
-    check();
+    await check();
+    await run('INSERT OR IGNORE INTO course_cover_files VALUES (?,?)', courseId, key);
     if (lessonId)
-      run(
+      await run(
         `INSERT INTO lesson_presentation(lesson_id,cover_key,cover_version) VALUES (?,?,1) ON CONFLICT(lesson_id) DO UPDATE SET cover_key=excluded.cover_key,cover_version=lesson_presentation.cover_version+1`,
         lessonId,
         key,
       );
     else
-      run(
+      await run(
         `INSERT INTO course_presentation(course_id,cover_key,cover_version) VALUES (?,?,1)
       ON CONFLICT(course_id) DO UPDATE SET cover_key=excluded.cover_key,cover_version=course_presentation.cover_version+1`,
         courseId,
         key,
       );
-    recordAudit(
+    await recordAudit(
       actorId,
       lessonId ? 'lesson.cover.uploaded' : 'course.cover.uploaded',
       lessonId || courseId,
     );
   } catch (error) {
-    await unlink(/* turbopackIgnore: true */ path);
+    await deleteStored(`covers/${key}`, path);
     throw error;
   }
 }
 export async function readCourseCover(courseId: string, actorId?: string, lessonId?: string) {
-  const row = one<{ owner_id: string; status: string; cover_key: string }>(
+  const row = await one<{
+    owner_id: string;
+    status: string;
+    cover_key: string;
+    section_removed?: number;
+  }>(
     lessonId
-      ? 'SELECT c.owner_id,c.status,p.cover_key FROM courses c JOIN sections s ON s.course_id=c.id JOIN lessons l ON l.section_id=s.id JOIN lesson_presentation p ON p.lesson_id=l.id WHERE c.id=? AND l.id=?'
+      ? 'SELECT c.owner_id,c.status,p.cover_key,EXISTS(SELECT 1 FROM section_trash t WHERE t.section_id=s.id) section_removed FROM courses c JOIN sections s ON s.course_id=c.id JOIN lessons l ON l.section_id=s.id JOIN lesson_presentation p ON p.lesson_id=l.id WHERE c.id=? AND l.id=?'
       : 'SELECT c.owner_id,c.status,p.cover_key FROM courses c JOIN course_presentation p ON p.course_id=c.id WHERE c.id=?',
     ...(lessonId ? [courseId, lessonId] : [courseId]),
   );
   if (!row?.cover_key) return undefined;
-  if (row.status !== 'published') {
+  if (row.status !== 'published' || row.section_removed) {
     if (!actorId) return undefined;
     try {
-      const user = actor(actorId);
+      const user = await actor(actorId);
       if (user.role !== 'admin' && !(user.role === 'teacher' && row.owner_id === user.id))
         return undefined;
     } catch {
@@ -90,13 +94,17 @@ export async function readCourseCover(courseId: string, actorId?: string, lesson
     }
   }
   try {
-    return await readFile(/* turbopackIgnore: true */ coverPath(row.cover_key));
+    return await getStored(`covers/${row.cover_key}`, coverPath(row.cover_key));
   } catch {
     return undefined;
   }
 }
-export function lectureCoverPresentation(lessonId: string) {
-  const row = one<{ preset: string; has_cover: number; cover_version: number }>(
+export async function lectureCoverPresentation(lessonId: string) {
+  const row = await one<{
+    preset: string;
+    has_cover: number;
+    cover_version: number;
+  }>(
     'SELECT preset,(cover_key IS NOT NULL) has_cover,cover_version FROM lesson_presentation WHERE lesson_id=?',
     lessonId,
   );

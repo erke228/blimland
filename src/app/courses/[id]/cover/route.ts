@@ -1,7 +1,16 @@
 import { currentUser } from '@/lib/auth';
 import { readCourseCover } from '@/lib/course-covers';
 export const runtime = 'nodejs';
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(
+  _request: Request,
+  {
+    params,
+  }: {
+    params: Promise<{
+      id: string;
+    }>;
+  },
+) {
   const { id } = await params;
   const user = await currentUser();
   const buffer = await readCourseCover(id, user?.id);

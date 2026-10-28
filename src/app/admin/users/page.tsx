@@ -7,25 +7,31 @@ import { AdminTabs } from '@/components/admin-tabs';
 export default async function Users({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; role?: string; status?: string }>;
+  searchParams: Promise<{
+    q?: string;
+    role?: string;
+    status?: string;
+  }>;
 }) {
   await requireRole('admin');
   const query = await searchParams;
   const needle = (query.q || '').slice(0, 200).toLocaleLowerCase('kk-KZ');
-  const users = all<{
-    id: string;
-    name: string;
-    email: string;
-    role: string;
-    status: string;
-    department: string;
-    created_at: number;
-  }>(
-    `SELECT id, name, email, role, status, department, created_at FROM users WHERE (? = '' OR role = ?) AND (? = '' OR status = ?) ORDER BY created_at DESC`,
-    query.role || '',
-    query.role || '',
-    query.status || '',
-    query.status || '',
+  const users = (
+    await all<{
+      id: string;
+      name: string;
+      email: string;
+      role: string;
+      status: string;
+      department: string;
+      created_at: number;
+    }>(
+      `SELECT id, name, email, role, status, department, created_at FROM users WHERE (? = '' OR role = ?) AND (? = '' OR status = ?) ORDER BY created_at DESC`,
+      query.role || '',
+      query.role || '',
+      query.status || '',
+      query.status || '',
+    )
   ).filter((u) =>
     `${u.name} ${u.email} ${u.department}`.toLocaleLowerCase('kk-KZ').includes(needle),
   );

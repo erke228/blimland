@@ -1,11 +1,20 @@
 import { currentUser } from '@/lib/auth';
 import { groupReport, ManagementError } from '@/lib/management';
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(
+  _request: Request,
+  {
+    params,
+  }: {
+    params: Promise<{
+      id: string;
+    }>;
+  },
+) {
   const user = await currentUser();
   if (!user) return new Response('Unauthorized', { status: 401 });
   const { id } = await params;
   try {
-    const report = groupReport(user.id, id);
+    const report = await groupReport(user.id, id);
     const cell = (value: unknown) => {
       let text = String(value ?? '');
       if (/^[\s]*[=+@\-]/.test(text) || /^[\t\r]/.test(text)) text = `'${text}`;

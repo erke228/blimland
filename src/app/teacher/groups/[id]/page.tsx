@@ -19,30 +19,43 @@ export default async function GroupDetail({
   params,
   searchParams,
 }: {
-  params: Promise<{ id: string }>;
-  searchParams: Promise<{ error?: string; success?: string }>;
+  params: Promise<{
+    id: string;
+  }>;
+  searchParams: Promise<{
+    error?: string;
+    success?: string;
+  }>;
 }) {
   const user = await requireRole('teacher', 'admin');
   const { id } = await params;
   let group;
   try {
-    group = managedGroup(user.id, id);
+    group = await managedGroup(user.id, id);
   } catch (e) {
     if (e instanceof ManagementError) notFound();
     throw e;
   }
-  const report = groupReport(user.id, id);
-  const assigned = all<{ id: string; title: string; status: string }>(
+  const report = await groupReport(user.id, id);
+  const assigned = await all<{
+    id: string;
+    title: string;
+    status: string;
+  }>(
     'SELECT c.id, c.title, c.status FROM group_courses gc JOIN courses c ON c.id = gc.course_id WHERE gc.group_id = ?',
     id,
   );
-  const available = all<{ id: string; title: string; teacher: string }>(
-    `SELECT c.id, c.title, u.name teacher FROM courses c JOIN users u ON u.id = c.owner_id WHERE c.status = 'published' AND c.price_kzt = 0 AND (? = 'admin' OR c.owner_id = ?) AND c.id NOT IN (SELECT course_id FROM group_courses WHERE group_id = ?) ORDER BY c.title`,
+  const available = await all<{
+    id: string;
+    title: string;
+    teacher: string;
+  }>(
+    `SELECT c.id, c.title, u.name teacher FROM courses c JOIN users u ON u.id = c.owner_id WHERE c.status = 'published' AND (? = 'admin' OR c.owner_id = ?) AND c.id NOT IN (SELECT course_id FROM group_courses WHERE group_id = ?) ORDER BY c.title`,
     user.role,
     user.id,
     id,
   );
-  const invites = all<{
+  const invites = await all<{
     id: string;
     expires_at: number;
     max_uses: number;
@@ -53,7 +66,7 @@ export default async function GroupDetail({
     id,
   );
   const raw = (await cookies()).get(`group_invite_${id}`)?.value;
-  const currentInvite = raw ? invitation(raw) : undefined;
+  const currentInvite = raw ? await invitation(raw) : undefined;
   const link =
     currentInvite?.group_id === id
       ? `${(process.env.APP_ORIGIN || 'http://127.0.0.1:3000').replace(/\/$/, '')}/join/${raw}`
@@ -123,7 +136,7 @@ export default async function GroupDetail({
               <form action={assignCourseAction} className="form-stack spaced">
                 <input type="hidden" name="groupId" value={id} />
                 <label>
-                  Жарияланған тегін курс
+                  Жарияланған курс
                   <select name="courseId" required disabled={!available.length}>
                     <option value="">Курсты таңдаңыз</option>
                     {available.map((c) => (
@@ -139,13 +152,10 @@ export default async function GroupDetail({
                 </SubmitButton>
                 {!available.length && (
                   <p className="help-text">
-                    Қосуға болатын жарияланған тегін курс жоқ. Алдымен курс жасап, оны жариялаңыз.
+                    Қосуға болатын жарияланған курс жоқ. Алдымен курс жасап, оны жариялаңыз.
                   </p>
                 )}
-                <p className="help-text">
-                  Курс топтағы студенттердің кабинетіне қосылады. Ақылы курстарға бұл әрекет
-                  қолжетімділік бермейді.
-                </p>
+                <p className="help-text">Курс топтағы студенттердің кабинетіне қосылады.</p>
               </form>
             )}
           </div>

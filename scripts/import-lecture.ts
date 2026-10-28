@@ -1,47 +1,48 @@
 import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
-import { migrate, one, run, transaction } from '../src/lib/db';
+import { migrate, one, run, transaction, usesPostgres } from '../src/lib/db';
+import { loadEnvironment } from './postgres-environment';
 import { addMaterial, materialPath } from '../src/lib/materials';
 import { recordAudit } from '../src/lib/management';
-
+import { getStored } from '../src/lib/storage';
 // Explicit local import requested by the owner. No account, email, password or
 // role is created/changed; the existing sole administrator owns the lecture.
 const source = process.argv[2];
 if (!source) throw new Error('Usage: npm run lecture:import -- path/to/Byte-pair-encoding.pdf');
-migrate();
-const owner = one<{ id: string }>(
-  "SELECT id FROM users WHERE role = 'admin' AND status = 'active'",
-);
+loadEnvironment();
+if (!usesPostgres()) await migrate();
+const owner = await one<{
+  id: string;
+}>("SELECT id FROM users WHERE role = 'admin' AND status = 'active'");
 if (!owner) throw new Error('Сначала создайте единственного администратора через admin:create.');
 const courseId = 'natural-language-processing';
 const sectionId = 'nlp-lectures';
 const lessonId = 'byte-pair-encoding';
 const bytes = await readFile(source);
-transaction(() => {
-  run(
+await transaction(async () => {
+  await run(
     'UPDATE users SET name = ?, updated_at = ? WHERE id = ?',
     'Тлеужанова Қ. Е.',
     Date.now(),
     owner.id,
   );
-  recordAudit(owner.id, 'profile.owner_name_updated', owner.id);
-  if (!one('SELECT id FROM courses WHERE id = ?', courseId)) {
-    run(
-      'INSERT INTO courses VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+  await recordAudit(owner.id, 'profile.owner_name_updated', owner.id);
+  if (!(await one('SELECT id FROM courses WHERE id = ?', courseId))) {
+    await run(
+      'INSERT INTO courses (id,owner_id,title,description,category,level,status,accent,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)',
       courseId,
       owner.id,
       'Табиғи тілді өңдеу',
       'Тлеужанова Қ. Е. дәрістері: мәтінді токенизациялау, Byte Pair Encoding, лексикалық талдау, WordNet және контекстегі сөз мағынасын анықтау.',
       'Технология',
       'Орташа',
-      0,
       'draft',
       'teal',
       Date.now(),
       Date.now(),
     );
-    run('INSERT INTO sections VALUES (?, ?, ?, ?)', sectionId, courseId, 'Дәрістер', 0);
-    run(
+    await run('INSERT INTO sections VALUES (?, ?, ?, ?)', sectionId, courseId, 'Дәрістер', 0);
+    await run(
       'INSERT INTO lessons VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       lessonId,
       sectionId,
@@ -54,27 +55,33 @@ transaction(() => {
     );
   }
 });
-const existing = one<{ id: string; storage_key: string }>(
+const existing = await one<{
+  id: string;
+  storage_key: string;
+}>(
   'SELECT id, storage_key FROM lesson_materials WHERE lesson_id = ? AND original_name = ? AND removed_at IS NULL',
   lessonId,
   'Byte-pair-encoding.pdf',
 );
 let materialId = existing?.id;
 if (existing) {
-  const saved = await readFile(materialPath(existing.storage_key));
+  const saved = await getStored(
+    `materials/${existing.storage_key}`,
+    materialPath(existing.storage_key),
+  );
   if (!saved.equals(bytes))
     throw new Error(
       'Лекция уже существует с другим содержимым: автоматическая перезапись запрещена.',
     );
 } else materialId = await addMaterial(owner.id, lessonId, 'Byte-pair-encoding.pdf', bytes);
-transaction(() => {
-  run(
+await transaction(async () => {
+  await run(
     "UPDATE courses SET status = 'published', updated_at = ? WHERE id = ? AND owner_id = ?",
     Date.now(),
     courseId,
     owner.id,
   );
-  recordAudit(owner.id, 'lecture.owner_imported', lessonId);
+  await recordAudit(owner.id, 'lecture.owner_imported', lessonId);
 });
 console.log(
   JSON.stringify(

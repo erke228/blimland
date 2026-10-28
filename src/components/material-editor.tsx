@@ -1,11 +1,26 @@
-import { FileUp } from 'lucide-react';
+import Link from 'next/link';
+import { FileUp, ExternalLink } from 'lucide-react';
 import { listMaterials } from '@/lib/materials';
 import { materialStatusAction } from '@/app/document-actions';
 import { SubmitButton } from './submit-button';
-export function MaterialEditor({ lessonId, userId }: { lessonId: string; userId: string }) {
-  const materials = listMaterials(lessonId, userId, true);
+import { DocumentFileInput } from './document-file-input';
+import { reopenCourseForEditing } from '@/app/actions';
+export async function MaterialEditor({
+  lessonId,
+  userId,
+  courseId,
+  readOnly = false,
+  archived = false,
+}: {
+  lessonId: string;
+  userId: string;
+  courseId: string;
+  readOnly?: boolean;
+  archived?: boolean;
+}) {
+  const materials = await listMaterials(lessonId, userId, !readOnly);
   return (
-    <section id="materials" className="material-editor">
+    <section id="materials" className="material-editor prominent-materials">
       <div className="profile-section-heading">
         <FileUp size={19} />
         <h2>PDF және Word материалдары</h2>
@@ -14,28 +29,36 @@ export function MaterialEditor({ lessonId, userId }: { lessonId: string; userId:
         Құжат сабақтың ішінде ашылады. PDF беттері түпнұсқа қалпында, Word (.docx) оқуға ыңғайлы
         көріністе көрсетіледі.
       </p>
-      <form
-        action="/api/lesson-materials"
-        method="post"
-        encType="multipart/form-data"
-        className="form-stack"
-      >
-        <input type="hidden" name="lessonId" value={lessonId} />
-        <label>
-          Құжатты таңдау
-          <input
-            name="file"
-            type="file"
-            accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            required
-          />
-          <small>
-            PDF немесе DOCX, 20 МБ-қа дейін. Бір сабаққа 10 материал. Ескі .doc файлын алдымен .docx
-            немесе PDF ретінде сақтаңыз.
-          </small>
-        </label>
-        <SubmitButton className="button outline">Құжатты жүктеу</SubmitButton>
-      </form>
+      {readOnly ? (
+        <div className="document-edit-notice">
+          <p className="help-text">
+            {archived
+              ? 'Құжат қосу үшін бас әкімші курсты архивтен қайтаруы тиіс.'
+              : 'PDF немесе Word қосу үшін курсты өңдеуге ашыңыз. Қайта мақұлданғанша курс студенттерге уақытша жабылады; файлдар мен оқу тарихы сақталады.'}
+          </p>
+          {!archived && (
+            <form action={reopenCourseForEditing}>
+              <input type="hidden" name="courseId" value={courseId} />
+              <input type="hidden" name="lessonId" value={lessonId} />
+              <SubmitButton className="button outline">Құжат қосу үшін өңдеуді ашу</SubmitButton>
+            </form>
+          )}
+        </div>
+      ) : (
+        <form
+          action="/api/lesson-materials"
+          method="post"
+          encType="multipart/form-data"
+          className="form-stack"
+        >
+          <input type="hidden" name="lessonId" value={lessonId} />
+          <DocumentFileInput required />
+          <SubmitButton className="button primary">
+            <FileUp size={17} />
+            PDF / Word жүктеу
+          </SubmitButton>
+        </form>
+      )}
       {materials.map((material) => (
         <div className="editor-material" key={material.id}>
           <div>
@@ -46,18 +69,35 @@ export function MaterialEditor({ lessonId, userId }: { lessonId: string; userId:
                 : `${material.kind.toUpperCase()} · ${material.page_count ? `${material.page_count} бет · ` : ''}${(material.size_bytes / 1024 / 1024).toFixed(1)} МБ`}
             </small>
           </div>
-          <form action={materialStatusAction}>
-            <input type="hidden" name="materialId" value={material.id} />
-            {material.removed_at && <input type="hidden" name="restore" value="yes" />}
-            <SubmitButton className="button outline tiny">
-              {material.removed_at ? 'Қалпына келтіру' : 'Алып тастау'}
-            </SubmitButton>
-          </form>
+          <div className="material-actions">
+            {!material.removed_at && (
+              <Link
+                className="button outline tiny"
+                href={`/materials/${material.id}/${material.kind === 'pdf' ? 'file' : 'preview'}`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <ExternalLink size={14} />
+                Ашу
+              </Link>
+            )}
+            {!readOnly && (
+              <form action={materialStatusAction}>
+                <input type="hidden" name="materialId" value={material.id} />
+                {material.removed_at && <input type="hidden" name="restore" value="yes" />}
+                <SubmitButton className="button outline tiny">
+                  {material.removed_at ? 'Қалпына келтіру' : 'Алып тастау'}
+                </SubmitButton>
+              </form>
+            )}
+          </div>
         </div>
       ))}
-      <p className="help-text spaced">
-        Алып тасталған материал студентке көрінбейді; оны қайта қалпына келтіруге болады.
-      </p>
+      {!readOnly && (
+        <p className="help-text spaced">
+          Алып тасталған материал студентке көрінбейді; оны қайта қалпына келтіруге болады.
+        </p>
+      )}
     </section>
   );
 }

@@ -8,13 +8,16 @@ import { safeReturnPath, settings } from '@/lib/management';
 export default async function Register({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; next?: string }>;
+  searchParams: Promise<{
+    error?: string;
+    next?: string;
+  }>;
 }) {
   const query = await searchParams;
   const next = safeReturnPath(query.next);
   if (await currentUser()) redirect(next || '/');
   const { error } = query;
-  const open = !!settings().registration_open;
+  const open = !!(await settings()).registration_open;
   return (
     <div className="auth-layout">
       <div className="auth-intro">
@@ -27,7 +30,7 @@ export default async function Register({
         <p>Пәндерге жазылып, дәрістерді оқыңыз және жеке кабинетте оқу барысын бақылаңыз.</p>
         <div className="auth-benefits">
           <span>✓ Жеке оқу кабинеті</span>
-          <span>✓ Тегін курстар</span>
+          <span>✓ Оқу материалдары</span>
           <span>✓ Сақталатын оқу барысы</span>
         </div>
       </div>

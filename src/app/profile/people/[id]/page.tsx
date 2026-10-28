@@ -5,16 +5,21 @@ import { notFound, redirect } from 'next/navigation';
 import { requireUser } from '@/lib/auth';
 import { basicProfile } from '@/lib/student-community';
 import { roleLabel } from '@/components/person-card';
-
 export const metadata: Metadata = {
   title: 'Қысқаша профиль',
   robots: { index: false, follow: false },
 };
-export default async function PersonProfile({ params }: { params: Promise<{ id: string }> }) {
+export default async function PersonProfile({
+  params,
+}: {
+  params: Promise<{
+    id: string;
+  }>;
+}) {
   const user = await requireUser();
   const { id } = await params;
   if (id === user.id) redirect('/profile');
-  const person = basicProfile(user.id, id);
+  const person = await basicProfile(user.id, id);
   if (!person) notFound();
   return (
     <>

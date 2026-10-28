@@ -15,11 +15,15 @@ export default async function Join({
   params,
   searchParams,
 }: {
-  params: Promise<{ token: string }>;
-  searchParams: Promise<{ error?: string }>;
+  params: Promise<{
+    token: string;
+  }>;
+  searchParams: Promise<{
+    error?: string;
+  }>;
 }) {
   const { token } = await params;
-  const invite = invitation(token);
+  const invite = await invitation(token);
   if (!invite)
     return (
       <div className="empty-state">
@@ -36,13 +40,15 @@ export default async function Join({
   const user = await currentUser();
   const member =
     !!user &&
-    !!one(
+    !!(await one(
       'SELECT user_id FROM group_members WHERE group_id = ? AND user_id = ?',
       invite.group_id,
       user.id,
-    );
-  const courses = all<{ title: string }>(
-    `SELECT c.title FROM group_courses gc JOIN courses c ON c.id = gc.course_id WHERE gc.group_id = ? AND c.status = 'published' AND c.price_kzt = 0`,
+    ));
+  const courses = await all<{
+    title: string;
+  }>(
+    `SELECT c.title FROM group_courses gc JOIN courses c ON c.id = gc.course_id WHERE gc.group_id = ? AND c.status = 'published'`,
     invite.group_id,
   );
   const next = encodeURIComponent(`/join/${token}`);
@@ -63,7 +69,7 @@ export default async function Join({
         </p>
         {courses.length > 0 && (
           <>
-            <h3>Сізге ашылатын тегін курстар</h3>
+            <h3>Сізге ашылатын курстар</h3>
             <ul>
               {courses.map((c, i) => (
                 <li key={i}>{c.title}</li>

@@ -7,10 +7,13 @@ import { AdminTabs } from '@/components/admin-tabs';
 export default async function SiteSettings({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; success?: string }>;
+  searchParams: Promise<{
+    error?: string;
+    success?: string;
+  }>;
 }) {
   await requireRole('admin');
-  const site = settings();
+  const site = await settings();
   return (
     <>
       <PageHeading
@@ -66,13 +69,6 @@ export default async function SiteSettings({
           </p>
           <SubmitButton>Баптауларды сақтау</SubmitButton>
         </form>
-        <div className="font-specimen">
-          <span>Қазақша мәтіннің көрінісі</span>
-          <p>Әә Ғғ Ққ Ңң Өө Ұұ Үү Һһ Іі</p>
-          <small>
-            Қаріп сайтпен бірге жергілікті жүктеледі, сыртқы Google Fonts сұрауы қажет емес.
-          </small>
-        </div>
       </div>
     </>
   );

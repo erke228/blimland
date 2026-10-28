@@ -4,18 +4,12 @@ import { usePathname } from 'next/navigation';
 import {
   BookOpen,
   LayoutDashboard,
-  GraduationCap,
   ShieldCheck,
   Compass,
-  Menu,
-  X,
   Users,
-  Settings,
   UserRound,
-  Activity,
   House,
 } from 'lucide-react';
-import { useState } from 'react';
 
 export function Navigation({
   role,
@@ -27,7 +21,6 @@ export function Navigation({
   institutionName: string;
 }) {
   const pathname = usePathname();
-  const [open, setOpen] = useState(false);
   const isTeacher = role === 'teacher' || role === 'admin';
   const links =
     role === 'admin'
@@ -36,43 +29,19 @@ export function Navigation({
             href: '/admin',
             label: 'Басқару тақтасы',
             icon: LayoutDashboard,
-            active: pathname === '/admin',
+            active: pathname.startsWith('/admin') || pathname.startsWith('/teacher/groups'),
           },
           {
-            href: '/admin/users',
-            label: 'Пайдаланушылар',
-            icon: Users,
-            active: pathname.startsWith('/admin/users'),
-          },
-          {
-            href: '/admin/courses',
-            label: 'Барлық курстар',
-            icon: BookOpen,
-            active: pathname.startsWith('/admin/courses'),
-          },
-          {
-            href: '/admin/groups',
-            label: 'Оқу топтары',
-            icon: GraduationCap,
-            active: pathname === '/admin/groups' || pathname.startsWith('/teacher/groups'),
+            href: '/courses',
+            label: 'Пәндер мен курстар',
+            icon: Compass,
+            active: pathname.startsWith('/courses') || pathname.startsWith('/learn'),
           },
           {
             href: '/teacher',
             label: 'Менің дәрістерім',
             icon: Compass,
             active: pathname.startsWith('/teacher') && !pathname.startsWith('/teacher/groups'),
-          },
-          {
-            href: '/admin/activity',
-            label: 'Әрекеттер журналы',
-            icon: Activity,
-            active: pathname === '/admin/activity',
-          },
-          {
-            href: '/admin/settings',
-            label: 'Сайт баптаулары',
-            icon: Settings,
-            active: pathname === '/admin/settings',
           },
           {
             href: '/profile',
@@ -121,17 +90,8 @@ export function Navigation({
         ];
   return (
     <>
-      <button
-        className="mobile-menu"
-        onClick={() => setOpen(!open)}
-        aria-label="Мәзір"
-        aria-expanded={open}
-        aria-controls="main-sidebar"
-      >
-        {open ? <X /> : <Menu />}
-      </button>
-      <aside id="main-sidebar" className={`sidebar ${open ? 'open' : ''}`}>
-        <Link href="/" className="brand" onClick={() => setOpen(false)} title={siteName}>
+      <aside id="main-sidebar" className="sidebar">
+        <Link href="/" className="brand" title={siteName}>
           <span className="brand-icon">
             <BookOpen size={23} />
           </span>
@@ -157,7 +117,6 @@ export function Navigation({
                 key={href}
                 href={href}
                 className={`nav-link ${active ? 'active' : ''}`}
-                onClick={() => setOpen(false)}
                 aria-current={active ? 'page' : undefined}
               >
                 <Icon size={19} />
@@ -170,19 +129,49 @@ export function Navigation({
         <div className="sidebar-bottom">
           <div className="sidebar-foot">
             Университеттің цифрлық оқу кеңістігі
-            <span>
-              ҚАЗ <i /> KZT ₸
-            </span>
+            <span>Қазақ тіліндегі оқу кеңістігі</span>
           </div>
         </div>
       </aside>
-      {open && (
-        <button
-          className="mobile-backdrop"
-          aria-label="Мәзірді жабу"
-          onClick={() => setOpen(false)}
-        />
-      )}
+      <nav className="mobile-bottom-nav" aria-label="Телефондағы навигация">
+        {[
+          { href: '/', label: 'Басты бет', icon: House, active: pathname === '/' },
+          {
+            href: '/courses',
+            label: 'Каталог',
+            icon: Compass,
+            active: pathname.startsWith('/courses'),
+          },
+          {
+            href: role === 'admin' ? '/admin' : isTeacher ? '/teacher' : '/dashboard',
+            label: role === 'admin' ? 'Басқару' : isTeacher ? 'Кабинет' : 'Менің оқуым',
+            icon: role === 'admin' ? LayoutDashboard : BookOpen,
+            active:
+              pathname.startsWith('/admin') ||
+              pathname.startsWith('/teacher') ||
+              pathname === '/dashboard' ||
+              pathname.startsWith('/learn'),
+          },
+          {
+            href: '/profile',
+            label: 'Профиль',
+            icon: UserRound,
+            active: pathname.startsWith('/profile'),
+          },
+        ].map(({ href, label, icon: Icon, active }) => (
+          <Link
+            key={href}
+            href={href}
+            className={active ? 'selected' : ''}
+            aria-current={active ? 'page' : undefined}
+          >
+            <span className="mobile-nav-icon">
+              <Icon size={22} aria-hidden="true" />
+            </span>
+            <span>{label}</span>
+          </Link>
+        ))}
+      </nav>
     </>
   );
 }

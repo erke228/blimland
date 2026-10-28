@@ -2,8 +2,8 @@ import Link from 'next/link';
 import { Users, BookOpen, ArrowUpRight } from 'lucide-react';
 import { listGroups } from '@/lib/management';
 import { EmptyState, statusLabel } from './ui';
-export function GroupList({ userId }: { userId: string }) {
-  const groups = listGroups(userId);
+export async function GroupList({ userId }: { userId: string }) {
+  const groups = await listGroups(userId);
   return groups.length ? (
     <div className="group-grid">
       {groups.map((g) => (

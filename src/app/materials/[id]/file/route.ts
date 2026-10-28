@@ -1,8 +1,16 @@
 import { currentUser } from '@/lib/auth';
 import { byteRange, readMaterial } from '@/lib/materials';
-
 export const runtime = 'nodejs';
-export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(
+  request: Request,
+  {
+    params,
+  }: {
+    params: Promise<{
+      id: string;
+    }>;
+  },
+) {
   const user = await currentUser();
   const data = await readMaterial((await params).id, user?.id);
   if (!data)

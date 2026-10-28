@@ -1,11 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, writeFile, readFile, unlink } from 'node:fs/promises';
+import { putStored, getStored, deleteStored } from './storage';
 import { resolve, basename } from 'node:path';
 import { PDFDocument } from 'pdf-lib';
 import { all, one, run, transaction } from './db';
 import { actor, recordAudit, ManagementError } from './management';
 import { convertDocx } from './document-conversion';
-
 export const MAX_DOCUMENT_BYTES = 20 * 1024 * 1024;
 export type Material = {
   id: string;
@@ -22,43 +21,47 @@ type LessonAccess = {
   owner_id: string;
   status: string;
   is_preview: number;
+  section_removed: number;
 };
-export function lessonAccess(lessonId: string) {
-  return one<LessonAccess>(
-    'SELECT l.id, s.course_id, c.owner_id, c.status, l.is_preview FROM lessons l JOIN sections s ON s.id = l.section_id JOIN courses c ON c.id = s.course_id WHERE l.id = ?',
+export async function lessonAccess(lessonId: string) {
+  return await one<LessonAccess>(
+    'SELECT l.id, s.course_id, c.owner_id, c.status, l.is_preview, EXISTS(SELECT 1 FROM section_trash t WHERE t.section_id=s.id) section_removed FROM lessons l JOIN sections s ON s.id = l.section_id JOIN courses c ON c.id = s.course_id WHERE l.id = ?',
     lessonId,
   );
 }
-export function canReadLesson(lessonId: string, viewerId?: string) {
-  const lesson = lessonAccess(lessonId);
+export async function canReadLesson(lessonId: string, viewerId?: string) {
+  const lesson = await lessonAccess(lessonId);
   if (!lesson) return false;
-  const viewer = viewerId ? actor(viewerId) : undefined;
+  const viewer = viewerId ? await actor(viewerId) : undefined;
   if (viewer && (viewer.role === 'admin' || lesson.owner_id === viewer.id)) return true;
   return (
+    !lesson.section_removed &&
     lesson.status === 'published' &&
     (!!lesson.is_preview ||
       (!!viewer &&
-        !!one(
+        !!(await one(
           'SELECT user_id FROM enrollments WHERE course_id = ? AND user_id = ?',
           lesson.course_id,
           viewer.id,
-        )))
+        ))))
   );
 }
-export function editableLesson(viewerId: string, lessonId: string) {
-  const viewer = actor(viewerId, ['teacher', 'admin']);
-  const lesson = lessonAccess(lessonId);
+export async function editableLesson(viewerId: string, lessonId: string) {
+  const viewer = await actor(viewerId, ['teacher', 'admin']);
+  const lesson = await lessonAccess(lessonId);
   if (!lesson || (viewer.role !== 'admin' && lesson.owner_id !== viewer.id))
     throw new ManagementError('forbidden');
-  if (lesson.status !== 'draft') throw new ManagementError('readonly');
+  if (lesson.status !== 'draft' || lesson.section_removed) throw new ManagementError('readonly');
   return lesson;
 }
-export function listMaterials(lessonId: string, viewerId?: string, includeRemoved = false) {
-  if (!canReadLesson(lessonId, viewerId)) throw new ManagementError('forbidden');
-  if (includeRemoved) editableLesson(viewerId || '', lessonId);
-  return all<Material>(
-    `SELECT id, original_name, kind, size_bytes, page_count, preview_warning, removed_at FROM lesson_materials WHERE lesson_id = ? ${includeRemoved ? '' : 'AND removed_at IS NULL'} ORDER BY created_at, id`,
-    lessonId,
+export async function listMaterials(lessonId: string, viewerId?: string, includeRemoved = false) {
+  if (!(await canReadLesson(lessonId, viewerId))) throw new ManagementError('forbidden');
+  if (includeRemoved) await editableLesson(viewerId || '', lessonId);
+  return (
+    await all<Material>(
+      `SELECT id, original_name, kind, size_bytes, page_count, preview_warning, removed_at FROM lesson_materials WHERE lesson_id = ? ${includeRemoved ? '' : 'AND removed_at IS NULL'} ORDER BY created_at, id`,
+      lessonId,
+    )
   ).map((material) => ({ ...material }));
 }
 export function materialPath(key: string, preview = false) {
@@ -74,7 +77,7 @@ export async function addMaterial(
   name: string,
   buffer: Buffer,
 ) {
-  editableLesson(viewerId, lessonId);
+  await editableLesson(viewerId, lessonId);
   if (!buffer.length || buffer.length > MAX_DOCUMENT_BYTES)
     throw new ManagementError('documentsize');
   const kind = name.toLowerCase().endsWith('.pdf')
@@ -84,7 +87,12 @@ export async function addMaterial(
       : undefined;
   if (!kind) throw new ManagementError('documenttype');
   let pages: number | null = null;
-  let preview: { html: string; warning: boolean } | undefined;
+  let preview:
+    | {
+        html: string;
+        warning: boolean;
+      }
+    | undefined;
   try {
     if (kind === 'pdf') {
       if (!buffer.subarray(0, 1024).includes(Buffer.from('%PDF-'))) throw new Error('header');
@@ -98,30 +106,43 @@ export async function addMaterial(
   const id = randomUUID();
   const key = `${id}.${kind}`;
   const path = materialPath(key);
-  await mkdir(
-    resolve(/* turbopackIgnore: true */ process.env.UPLOAD_DIR || './uploads/materials'),
-    { recursive: true },
+  await putStored(
+    `materials/${key}`,
+    path,
+    buffer,
+    kind === 'pdf'
+      ? 'application/pdf'
+      : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   );
-  await writeFile(path, buffer, { flag: 'wx' });
   try {
-    if (preview) await writeFile(materialPath(key, true), preview.html, { flag: 'wx' });
-    transaction(() => {
-      editableLesson(viewerId, lessonId); // Permissions may have changed while parsing.
-      const count = one<{ n: number }>(
+    if (preview)
+      await putStored(
+        `materials/${key}.html`,
+        materialPath(key, true),
+        preview.html,
+        'text/html; charset=utf-8',
+      );
+    await transaction(async () => {
+      await editableLesson(viewerId, lessonId); // Permissions may have changed while parsing.
+      const count = (await one<{
+        n: number;
+      }>(
         'SELECT COUNT(*) n FROM lesson_materials WHERE lesson_id = ? AND removed_at IS NULL',
         lessonId,
-      )!.n;
-      const total = one<{ n: number }>(
+      ))!.n;
+      const total = (await one<{
+        n: number;
+      }>(
         'SELECT COALESCE(SUM(size_bytes),0) n FROM lesson_materials WHERE created_by = ?',
         viewerId,
-      )!.n;
+      ))!.n;
       if (count >= 10 || total + buffer.length > 500 * 1024 * 1024)
         throw new ManagementError('documentquota');
       const filename =
         basename(name.replaceAll('\\', '/'))
           .replace(/[\x00-\x1f\x7f]/g, '')
           .slice(0, 180) || `document.${kind}`;
-      run(
+      await run(
         'INSERT INTO lesson_materials VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)',
         id,
         lessonId,
@@ -134,52 +155,65 @@ export async function addMaterial(
         viewerId,
         Date.now(),
       );
-      recordAudit(viewerId, 'lesson.material_uploaded', id);
+      await recordAudit(viewerId, 'lesson.material_uploaded', id);
     });
   } catch (error) {
-    await unlink(path).catch(() => {});
-    if (preview) await unlink(materialPath(key, true)).catch(() => {});
+    await deleteStored(`materials/${key}`, path).catch(() => {});
+    if (preview)
+      await deleteStored(`materials/${key}.html`, materialPath(key, true)).catch(() => {});
     throw error;
   }
   return id;
 }
-export function setMaterialRemoved(viewerId: string, id: string, removed: boolean) {
-  const material = one<{ lesson_id: string }>(
-    'SELECT lesson_id FROM lesson_materials WHERE id = ?',
-    id,
-  );
+export async function setMaterialRemoved(viewerId: string, id: string, removed: boolean) {
+  const material = await one<{
+    lesson_id: string;
+  }>('SELECT lesson_id FROM lesson_materials WHERE id = ?', id);
   if (!material) throw new ManagementError('forbidden');
-  editableLesson(viewerId, material.lesson_id);
-  transaction(() => {
+  await editableLesson(viewerId, material.lesson_id);
+  await transaction(async () => {
     if (
       !removed &&
-      one<{ n: number }>(
+      (await one<{
+        n: number;
+      }>(
         'SELECT COUNT(*) n FROM lesson_materials WHERE lesson_id = ? AND removed_at IS NULL',
         material.lesson_id,
-      )!.n >= 10
+      ))!.n >= 10
     )
       throw new ManagementError('documentquota');
-    run('UPDATE lesson_materials SET removed_at = ? WHERE id = ?', removed ? Date.now() : null, id);
-    recordAudit(viewerId, removed ? 'lesson.material_removed' : 'lesson.material_restored', id);
+    await run(
+      'UPDATE lesson_materials SET removed_at = ? WHERE id = ?',
+      removed ? Date.now() : null,
+      id,
+    );
+    await recordAudit(
+      viewerId,
+      removed ? 'lesson.material_removed' : 'lesson.material_restored',
+      id,
+    );
   });
   return material.lesson_id;
 }
-export function readableMaterial(id: string, viewerId?: string) {
-  const material = one<Material & { lesson_id: string; storage_key: string }>(
-    'SELECT * FROM lesson_materials WHERE id = ? AND removed_at IS NULL',
-    id,
-  );
-  if (!material || !canReadLesson(material.lesson_id, viewerId)) return undefined;
+export async function readableMaterial(id: string, viewerId?: string) {
+  const material = await one<
+    Material & {
+      lesson_id: string;
+      storage_key: string;
+    }
+  >('SELECT * FROM lesson_materials WHERE id = ? AND removed_at IS NULL', id);
+  if (!material || !(await canReadLesson(material.lesson_id, viewerId))) return undefined;
   return material;
 }
 export async function readMaterial(id: string, viewerId?: string, preview = false) {
-  const material = readableMaterial(id, viewerId);
+  const material = await readableMaterial(id, viewerId);
   if (!material || (preview && material.kind !== 'docx')) return undefined;
   try {
     return {
       material,
-      buffer: await readFile(
-        /* turbopackIgnore: true */ materialPath(material.storage_key, preview),
+      buffer: await getStored(
+        `materials/${material.storage_key}${preview ? '.html' : ''}`,
+        materialPath(material.storage_key, preview),
       ),
     };
   } catch (error) {

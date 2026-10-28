@@ -4,7 +4,9 @@ import { GroupForm } from '@/components/group-form';
 export default async function NewGroup({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{
+    error?: string;
+  }>;
 }) {
   await requireRole('teacher', 'admin');
   return (

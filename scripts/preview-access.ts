@@ -3,11 +3,12 @@ import { mkdirSync, existsSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { migrate, one, run, transaction } from '../src/lib/db';
 import { hashPassword } from '../src/lib/security';
-
 // Explicit local setup command. Never invoked by the web server or deployment.
-migrate();
+await migrate();
 const file = resolve('.local/preview-access.txt');
-const existing = one<{ email: string }>("SELECT email FROM users WHERE role = 'admin'");
+const existing = await one<{
+  email: string;
+}>("SELECT email FROM users WHERE role = 'admin'");
 if (existing) {
   console.log(
     existsSync(file)
@@ -24,8 +25,8 @@ if (existsSync(file)) {
 }
 const password = randomBytes(18).toString('base64url');
 const email = 'owner@bilimhub.local';
-transaction(() => {
-  run(
+await transaction(async () => {
+  await run(
     'INSERT INTO users (id, email, name, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?, ?)',
     randomUUID(),
     email,

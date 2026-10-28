@@ -1,6 +1,6 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import Link from 'next/link';
-import { GraduationCap, ArrowUpRight } from 'lucide-react';
+import { GraduationCap, ArrowUpRight, BookOpen } from 'lucide-react';
 import { currentUser } from '@/lib/auth';
 import { Navigation } from '@/components/navigation';
 import { logout } from './actions';
@@ -14,9 +14,16 @@ import './globals.css';
 import './management.css';
 import './profile.css';
 import './documents.css';
-
+import './library.css';
+import './mobile.css';
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+  themeColor: '#f5f8f6',
+};
 export async function generateMetadata(): Promise<Metadata> {
-  const site = settings();
+  const site = await settings();
   return {
     title: {
       default: `${site.site_name} — Университеттің оқу кеңістігі`,
@@ -29,10 +36,13 @@ export async function generateMetadata(): Promise<Metadata> {
 export const dynamic = 'force-dynamic';
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const user = await currentUser();
-  const site = settings();
+  const site = await settings();
   return (
     <html lang="kk" data-scroll-behavior="smooth">
-      <body>
+      <body data-role={user?.role || 'guest'}>
+        <a className="skip-content" href="#main-content">
+          Мазмұнға өту
+        </a>
         <Navigation
           role={user?.role}
           siteName={site.site_name}
@@ -40,6 +50,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         />
         <div className="app-shell">
           <header className="topbar">
+            <Link className="mobile-brand" href="/" aria-label={`${site.site_name} — басты бет`}>
+              <span>
+                <BookOpen size={22} />
+              </span>
+              <strong>{site.site_name}</strong>
+            </Link>
             <div className="topbar-context">
               <GraduationCap size={19} />
               <span>{site.institution_name} · Оқу кеңістігі</span>
@@ -48,7 +64,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               <span className="language-badge">ҚАЗ</span>
               {user ? (
                 <>
-                  <Link className="account" href="/profile">
+                  <Link
+                    className="account"
+                    href="/profile"
+                    aria-label={`${user.name} — менің профилім`}
+                  >
                     <span className="avatar">{user.name[0]}</span>
                     <span>{user.name}</span>
                   </Link>
@@ -68,7 +88,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               )}
             </div>
           </header>
-          <main>
+          <main id="main-content">
             {site.announcement && (
               <div className="site-announcement" role="status">
                 {site.announcement}
