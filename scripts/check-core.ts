@@ -26,8 +26,8 @@ mkdirSync('.test-data', { recursive: true });
 process.env.DATABASE_PATH = resolve('.test-data', `${randomUUID()}.sqlite`);
 process.env.UPLOAD_DIR = resolve('.test-data', `http-materials-${randomUUID()}`);
 if (!postgresTest) {
-  process.env.DATABASE_DRIVER='sqlite';
-  process.env.STORAGE_DRIVER='local';
+  process.env.DATABASE_DRIVER = 'sqlite';
+  process.env.STORAGE_DRIVER = 'local';
   await migrate();
 }
 const adminEmail = 'admin@integration.invalid';
@@ -53,7 +53,15 @@ const origin = `http://127.0.0.1:${port}`;
 let logs = '';
 const server = spawn(
   process.execPath,
-  ['node_modules/next/dist/bin/next', 'start', '--port', String(port), '--hostname', '127.0.0.1'],
+  [
+    ...(process.argv.includes('--strict-cjs') ? ['--no-experimental-require-module'] : []),
+    'node_modules/next/dist/bin/next',
+    'start',
+    '--port',
+    String(port),
+    '--hostname',
+    '127.0.0.1',
+  ],
   {
     env: { ...process.env, APP_ORIGIN: '', COOKIE_SECURE: 'false' },
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -1196,7 +1204,7 @@ try {
     'PASS: no course prices or paid restrictions, open enrollment, immediate custom course banner, admin hide/trash/restore/permanent deletion, owner isolation, extended profile/avatar privacy, password/email and session revocation, PDF >2MB/DOCX, section restoration, learning, group privacy, invitations, CSV, blocking and registration settings.',
   );
 } catch (error) {
-  mkdirSync('.local',{recursive:true});
+  mkdirSync('.local', { recursive: true });
   writeFileSync(
     '.local/neon-http-server.log',
     logs.replace(/postgres(?:ql)?:\/\/[^\s]+/g, '[DATABASE_URL redacted]'),

@@ -3,7 +3,9 @@ import type { NextConfig } from 'next';
 const config: NextConfig = {
   output: 'standalone',
   poweredByHeader: false,
-  serverExternalPackages: ['node:sqlite', 'mammoth', 'yauzl', 'sanitize-html', 'sharp'],
+  serverExternalPackages: ['node:sqlite', 'mammoth', 'yauzl', 'sharp'],
+  // Bundle the sanitizer's ESM dependencies instead of require() in Vercel's runtime.
+  transpilePackages: ['sanitize-html', 'htmlparser2'],
   outputFileTracingIncludes: { '/*': ['./scripts/convert-docx.cjs'] },
   outputFileTracingExcludes: {
     '/*': ['./data/**', './uploads/**', './.test-data/**', './.local/**'],
