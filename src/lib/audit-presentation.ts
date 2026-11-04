@@ -25,6 +25,12 @@ const labels: Record<string, string> = {
   'course.cover.preset': 'Курс иллюстрациясы өзгертілді',
   'course.cover.uploaded': 'Курс мұқабасы жүктелді',
   'lesson.created': 'Дәріс қосылды',
+  'quiz.created': 'Дәріске тест қосылды',
+  'quiz.submitted': 'Тест жауабы жіберілді',
+  'quiz.answer_graded': 'Қысқа жауап бағаланды',
+  'lesson.practice_created': 'Python практикумы қосылды',
+  'lesson.video_uploaded': 'Қысқа бейнесабақ қосылды',
+  'course.content_imported': 'Курс материалдары енгізілді',
   'lesson.updated': 'Дәріс мазмұны өңделді',
   'lesson.cover.updated': 'Дәріс мұқабасы өзгертілді',
   'lesson.cover.uploaded': 'Дәріс мұқабасы жүктелді',
@@ -81,7 +87,7 @@ export function auditPresentation(action: string) {
     kind = 'access';
   else if (action.startsWith('site.')) kind = 'settings';
   else if (/created|uploaded/.test(action)) kind = 'create';
-  else if (/updated|cover.preset/.test(action)) kind = 'edit';
+  else if (/updated|graded|cover.preset/.test(action)) kind = 'edit';
   return {
     kind,
     label: labels[action] || 'Басқа басқару әрекеті',

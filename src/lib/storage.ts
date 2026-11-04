@@ -1,5 +1,6 @@
 import { mkdir, writeFile, readFile, unlink } from 'node:fs/promises';
 import { dirname } from 'node:path';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import {
   S3Client,
   PutObjectCommand,
@@ -30,9 +31,23 @@ function s3() {
   }));
 }
 function checkedKey(key: string) {
-  if (!/^(materials|covers|avatars)\/[a-f0-9-]{36}\.(pdf|docx|webp)(\.html)?$/.test(key))
+  if (
+    !/^(?:(materials|covers|avatars)\/[a-f0-9-]{36}\.(pdf|docx|webp)(\.html)?|videos\/[a-f0-9-]{36}\.mp4)$/.test(
+      key,
+    )
+  )
     throw new Error('Invalid storage key.');
   return key;
+}
+export async function privateVideoUrl(key: string) {
+  checkedKey(key);
+  if (!/^videos\//.test(key)) throw new Error('A video key is required.');
+  if (!usesObjectStorage()) return undefined;
+  return getSignedUrl(
+    s3(),
+    new GetObjectCommand({ Bucket: bucket, Key: key, ResponseContentType: 'video/mp4' }),
+    { expiresIn: 300 },
+  );
 }
 export async function putStored(
   key: string,

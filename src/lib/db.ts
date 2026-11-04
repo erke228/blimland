@@ -146,6 +146,8 @@ export async function migrate() {
     '006_section_trash',
     '007_course_lifecycle_profiles',
     '008_remove_course_pricing',
+    '009_learning_tools',
+    '010_video_cleanup',
   ]) {
     if (!(await one('SELECT name FROM migrations WHERE name=?', name)))
       await transaction(async () => {

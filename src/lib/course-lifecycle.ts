@@ -5,6 +5,7 @@ import { actor, recordAudit, ManagementError } from './management';
 import { getCourse } from './courses';
 import { materialPath } from './materials';
 import { coverPath } from './course-covers';
+import { videoPath } from './lesson-videos';
 export async function lifecycleCourse(actorId: string, id: string) {
   const user = await actor(actorId, ['teacher', 'admin']);
   const course = await getCourse(id);
@@ -52,6 +53,16 @@ export async function deletionSummary(actorId: string, id: string) {
   ))!;
 }
 export async function flushFileDeletions() {
+  for (const job of await all<{ storage_key: string }>(
+    'SELECT storage_key FROM video_deletions ORDER BY created_at LIMIT 100',
+  )) {
+    try {
+      await deleteStored(`videos/${job.storage_key}`, videoPath(job.storage_key));
+      await run('DELETE FROM video_deletions WHERE storage_key=?', job.storage_key);
+    } catch {
+      /* Retain failed video cleanup for retry. */
+    }
+  }
   for (const job of await all<{
     id: string;
     kind: string;
@@ -77,7 +88,7 @@ export async function flushFileDeletions() {
   }
   return (await one<{
     n: number;
-  }>('SELECT COUNT(*) n FROM file_deletions'))!.n;
+  }>('SELECT (SELECT COUNT(*) FROM file_deletions)+(SELECT COUNT(*) FROM video_deletions) n'))!.n;
 }
 export async function purgeCourse(actorId: string, id: string, title: string, confirmed: boolean) {
   await actor(actorId, ['admin']);
@@ -92,6 +103,15 @@ export async function purgeCourse(actorId: string, id: string, title: string, co
       'SELECT m.storage_key,m.kind FROM lesson_materials m JOIN lessons l ON l.id=m.lesson_id JOIN sections s ON s.id=l.section_id WHERE s.course_id=?',
       id,
     );
+    for (const video of await all<{ storage_key: string }>(
+      'SELECT v.storage_key FROM lesson_videos v JOIN lessons l ON l.id=v.lesson_id JOIN sections s ON s.id=l.section_id WHERE s.course_id=?',
+      id,
+    ))
+      await run(
+        'INSERT INTO video_deletions(storage_key,created_at) VALUES(?,?) ON CONFLICT(storage_key) DO NOTHING',
+        video.storage_key,
+        Date.now(),
+      );
     const queue = async (key: string, kind: string) =>
       await run('INSERT INTO file_deletions VALUES (?,?,?,?)', randomUUID(), key, kind, Date.now());
     await Promise.all(

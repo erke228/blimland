@@ -1,0 +1,47 @@
+<!doctype html><html lang="kk"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net data:; connect-src https://cdn.jsdelivr.net; img-src data:; style-src 'unsafe-inline'; worker-src data:; base-uri 'none'; form-action 'none'"><title>Python нәтижесі</title><style>body{font:16px/1.5 Arial,sans-serif;margin:16px;color:#172b32;background:#fff}pre{font:15px/1.5 Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere}img{max-width:100%;height:auto}#status{color:#32665d}</style></head><body><p id="status" role="status">Іске қосуды күту…</p><pre id="output" aria-live="polite"></pre><div id="plots"></div><script>
+// This document must remain in an opaque-origin sandbox. It receives only code,
+// has no app cookies or DOM access, and its CSP restricts network access to the runtime CDN.
+const statusNode=document.getElementById('status'),output=document.getElementById('output'),plots=document.getElementById('plots');
+let worker,timer,requestId;
+function finish(message){if(timer)clearTimeout(timer);if(worker)worker.terminate();worker=undefined;statusNode.textContent=message;parent.postMessage({type:'lab-done',requestId},'*');}
+const workerSource=`
+self.onmessage=async(event)=>{
+ let captured='';
+ function append(line){if(captured.length<40000)captured+=(line+'\\n').slice(0,40000-captured.length);}
+ try{
+  const {loadPyodide}=await import('https://cdn.jsdelivr.net/pyodide/v314.0.7/full/pyodide.mjs');
+  const py=await loadPyodide({indexURL:'https://cdn.jsdelivr.net/pyodide/v314.0.7/full/',stdout:append,stderr:append});
+  await py.loadPackagesFromImports(event.data.code,{messageCallback:()=>{},errorCallback:()=>{}});
+  const globals=py.globals.get('dict')();
+  if(event.data.code.includes('matplotlib')) await py.runPythonAsync("import matplotlib\\nmatplotlib.use('Agg')",{globals});
+  self.postMessage({type:'running'});
+  const result=await py.runPythonAsync(event.data.code,{globals});
+  if(result!==undefined&&result!==null)append(String(result));
+  const images=[];
+  if(event.data.code.includes('matplotlib')){
+   const encoded=await py.runPythonAsync("import matplotlib.pyplot as _plt, io as _io, base64 as _base64\\n_images=[]\\nfor _n in _plt.get_fignums()[:2]:\\n    _buf=_io.BytesIO()\\n    _plt.figure(_n).savefig(_buf,format='png',dpi=110,bbox_inches='tight')\\n    _images.append(_base64.b64encode(_buf.getvalue()).decode())\\n_plt.close('all')\\n_images",{globals});
+   images.push(...encoded.toJs());encoded.destroy();
+  }
+  globals.destroy();result?.destroy?.();
+  self.postMessage({type:'result',text:captured||'Код орындалды. print() арқылы нәтижені шығарыңыз.',images});
+ }catch(error){self.postMessage({type:'error',text:captured+'\\n'+String(error.message||error)});}
+};`;
+window.addEventListener('message',event=>{
+ if(event.source!==parent)return;
+ if(event.data?.type==='lab-stop'){finish('Орындалу тоқтатылды.');return;}
+ if(event.data?.type!=='lab-run'||typeof event.data.code!=='string'||event.data.code.length>30000)return;
+ if(worker)finish('');requestId=event.data.requestId;output.textContent='';plots.replaceChildren();statusNode.textContent='Python және қажетті кітапханалар жүктелуде…';
+ worker=new Worker('data:text/javascript;charset=utf-8,'+encodeURIComponent(workerSource),{type:'module'});
+ timer=setTimeout(()=>finish('Орта жүктелмеді. Интернетті тексеріп, қайта іске қосыңыз.'),120000);
+ worker.onerror=event=>{output.textContent=event.message||'Ортаны жүктеу қатесі';finish('Қате. Қайта іске қосуға болады.');};
+ worker.onmessage=event=>{
+  if(event.data.type==='running'){clearTimeout(timer);timer=setTimeout(()=>finish('10 секундтық орындау шегі аяқталды. Кодты қысқартыңыз.'),10000);statusNode.textContent='Код орындалуда…';return;}
+  if(event.data.type==='result'||event.data.type==='error'){
+   output.textContent=String(event.data.text).slice(0,45000);
+   for(const data of (event.data.images||[]).slice(0,2)){if(typeof data==='string'&&data.length<6000000&&/^[A-Za-z0-9+/=]+$/.test(data)){const img=document.createElement('img');img.src='data:image/png;base64,'+data;img.alt='Python графигі';plots.append(img);}}
+   finish(event.data.type==='error'?'Python қатесі. Кодты түзетіп, қайта іске қосыңыз.':'Орындалды.');
+  }
+ };
+ worker.postMessage({code:event.data.code});
+});
+</script></body></html>

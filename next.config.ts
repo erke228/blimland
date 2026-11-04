@@ -18,7 +18,11 @@ const config: NextConfig = {
         headers: [{ key: 'X-Frame-Options', value: 'SAMEORIGIN' }],
       },
       {
-        source: '/((?!materials/[^/]+/preview$).*)',
+        source: '/python-lab.html',
+        headers: [{ key: 'X-Frame-Options', value: 'SAMEORIGIN' }],
+      },
+      {
+        source: '/((?!materials/[^/]+/preview$|python-lab\\.html$).*)',
         headers: [
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },

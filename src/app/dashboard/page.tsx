@@ -13,6 +13,17 @@ export default async function Dashboard({
 }) {
   const user = await requireUser();
   const { error } = await searchParams;
+  const assessments = await all<{
+    id: string;
+    lesson_id: string;
+    title: string;
+    points: number;
+    max_points: number;
+    status: string;
+  }>(
+    `SELECT a.id,a.lesson_id,l.title,a.points,a.max_points,a.status FROM quiz_attempts a JOIN lessons l ON l.id=a.lesson_id JOIN sections s ON s.id=l.section_id JOIN courses c ON c.id=s.course_id WHERE a.user_id=? AND c.status='published' ORDER BY a.submitted_at DESC LIMIT 10`,
+    user.id,
+  );
   const ids = await all<{
     course_id: string;
   }>('SELECT course_id FROM enrollments WHERE user_id = ? ORDER BY created_at DESC', user.id);
@@ -107,6 +118,20 @@ export default async function Dashboard({
           <p>Жазылған курстарыңыз және оқу барысы.</p>
         </div>
       </div>
+      {!!assessments.length && (
+        <section className="panel">
+          <h2>Соңғы тест әрекеттері</h2>
+          {assessments.map((a) => (
+            <p key={a.id}>
+              <Link className="text-link" href={`/learn/${a.lesson_id}#knowledge-check`}>
+                {a.title}
+              </Link>{' '}
+              · {a.points}/{a.max_points} ·{' '}
+              {a.status === 'awaiting_review' ? 'Тексеру күтілуде' : 'Бағаланған'}
+            </p>
+          ))}
+        </section>
+      )}
       {courses.length ? (
         <div className="course-grid">
           {courses.map((course) => (

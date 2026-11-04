@@ -577,12 +577,99 @@ try {
     416,
   );
   assert.equal((await student.get(wordPath)).status, 200);
+  // New learning tools are exercised over HTTP in this isolated fixture DB.
+  const quizOwner = (await one<{ id: string }>('SELECT id FROM users WHERE email=?', adminEmail))!
+    .id;
+  await run(
+    'INSERT INTO lesson_quizzes VALUES(?,?,?,?,?,?,?)',
+    lessonId,
+    'HTTP білім тексеруі',
+    1,
+    2,
+    5,
+    quizOwner,
+    Date.now(),
+  );
+  const choiceQuestion = randomUUID(),
+    writtenQuestion = randomUUID();
+  await run(
+    'INSERT INTO quiz_questions VALUES(?,?,?,?,?,?,?,?)',
+    choiceQuestion,
+    lessonId,
+    0,
+    'single_choice',
+    '2+3?',
+    '["4","5"]',
+    '{"correct_index":1,"explanation":"HIDDEN-HTTP-QUIZ-KEY"}',
+    1,
+  );
+  await run(
+    'INSERT INTO quiz_questions VALUES(?,?,?,?,?,?,?,?)',
+    writtenQuestion,
+    lessonId,
+    1,
+    'short_answer',
+    'Негіздеме жазыңыз.',
+    '[]',
+    '{"sample_answer":"HIDDEN-HTTP-SAMPLE","rubric":"0–2"}',
+    2,
+  );
+  await run(
+    'INSERT INTO lesson_practices VALUES(?,?,?,?,?,?,?)',
+    lessonId,
+    'HTTP Python практикасы',
+    'Санды есептеңіз.',
+    'print(2+3)',
+    'print(2+3)',
+    '',
+    '5',
+  );
+  const quizHtml = await student.html(`/learn/${lessonId}`);
+  assert(quizHtml.includes('knowledge-check') && quizHtml.includes('python-practice'));
+  assert(!quizHtml.includes('HIDDEN-HTTP-QUIZ-KEY') && !quizHtml.includes('HIDDEN-HTTP-SAMPLE'));
+  const submissionKey = randomUUID();
+  await student.submit(
+    `/learn/${lessonId}`,
+    {
+      lessonId,
+      submissionKey,
+      [`answer:${choiceQuestion}`]: '1',
+      [`answer:${writtenQuestion}`]: 'Екіге үшті қосамыз.',
+    },
+    'name="submissionKey"',
+  );
+  const quizResult = await student.html(`/learn/${lessonId}`);
+  assert(
+    quizResult.includes('Соңғы нәтиже:') &&
+      quizResult.includes('Қысқа жауаптар оқытушының тексеруін күтуде'),
+  );
+  assert.equal((await student.get(`/learn/${lessonId}/practice?format=py`)).status, 200);
+  assert.equal((await guest.get(`/learn/${lessonId}/practice`)).status, 404);
+  assert.equal((await student.get(`/teacher/courses/${id}/assessment`)).status, 307);
+  const attempts = await teacher.html(`/teacher/courses/${id}/assessment`);
+  assert(attempts.includes('Екіге үшті қосамыз.') && attempts.includes('HIDDEN-HTTP-SAMPLE'));
+  const attempt = (await one<{ id: string }>(
+    'SELECT id FROM quiz_attempts WHERE lesson_id=?',
+    lessonId,
+  ))!;
+  await teacher.submit(
+    `/teacher/courses/${id}/assessment`,
+    { attemptId: attempt.id, questionId: writtenQuestion, points: '2', feedback: 'Дұрыс.' },
+    'name="questionId"',
+  );
+  assert.equal(
+    (await one<{ points: number; status: string }>(
+      'SELECT points,status FROM quiz_attempts WHERE id=?',
+      attempt.id,
+    ))!.points,
+    3,
+  );
   await run('UPDATE lessons SET is_preview = 1 WHERE id = ?', lessonId);
   assert.equal((await guest.get(filePath)).status, 200);
   await run('UPDATE lessons SET is_preview = 0 WHERE id = ?', lessonId);
   assert.equal((await guest.get(filePath)).status, 404);
   assert((await student.html(`/learn/${lessonId}`)).includes('PRIVATE-LESSON-CONTENT'));
-  await student.submit(`/learn/${lessonId}`, { lessonId }, 'name="lessonId"');
+  await student.submit(`/learn/${lessonId}`, { lessonId }, 'Оқып шықтым');
   assert.match(await student.html('/dashboard'), /<progress[^>]*value="100"/);
   assert.equal(
     (await one<{
@@ -1201,7 +1288,7 @@ try {
   );
   assert.equal((await candidate.get('/profile')).status, 200);
   console.log(
-    'PASS: no course prices or paid restrictions, open enrollment, immediate custom course banner, admin hide/trash/restore/permanent deletion, owner isolation, extended profile/avatar privacy, password/email and session revocation, PDF >2MB/DOCX, section restoration, learning, group privacy, invitations, CSV, blocking and registration settings.',
+    'PASS: no course prices or paid restrictions, open enrollment, immediate custom course banner, admin hide/trash/restore/permanent deletion, owner isolation, extended profile/avatar privacy, password/email and session revocation, PDF >2MB/DOCX, section restoration, learning, native quiz submission/private keys/manual grading, practice download/access, group privacy, invitations, CSV, blocking and registration settings.',
   );
 } catch (error) {
   mkdirSync('.local', { recursive: true });

@@ -8,16 +8,26 @@ try {
   await client.query(
     'CREATE TABLE IF NOT EXISTS bilimhub_schema_migrations(name TEXT PRIMARY KEY,applied_at BIGINT NOT NULL)',
   );
-  const name = '001_initial';
-  if (
-    !(await client.query('SELECT name FROM bilimhub_schema_migrations WHERE name=$1', [name]))
-      .rowCount
-  ) {
-    await client.query(readFileSync('db/postgres/001_initial.sql', 'utf8'));
-    await client.query('INSERT INTO bilimhub_schema_migrations VALUES($1,$2)', [name, Date.now()]);
+  for (const [name, path] of [
+    ['001_initial', 'db/postgres/001_initial.sql'],
+    ['002_learning_tools', 'db/migrations/009_learning_tools.sql'],
+    ['003_video_cleanup', 'db/migrations/010_video_cleanup.sql'],
+  ]) {
+    if (
+      !(await client.query('SELECT name FROM bilimhub_schema_migrations WHERE name=$1', [name]))
+        .rowCount
+    ) {
+      await client.query(readFileSync(path, 'utf8'));
+      await client.query('INSERT INTO bilimhub_schema_migrations VALUES($1,$2)', [
+        name,
+        Date.now(),
+      ]);
+    }
   }
   await client.query('COMMIT');
-  console.log('PASS: PostgreSQL migration 001_initial applied/verified (direct connection).');
+  console.log(
+    'PASS: PostgreSQL migrations 001_initial–003_video_cleanup applied/verified (direct connection).',
+  );
 } catch (error) {
   await client.query('ROLLBACK');
   throw error;

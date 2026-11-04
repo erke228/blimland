@@ -12,6 +12,10 @@ import { listMaterials } from '@/lib/materials';
 import { DocumentMaterials } from '@/components/document-materials';
 import { lectureCoverPresentation } from '@/lib/course-covers';
 import { MobileDisclosure } from '@/components/mobile-disclosure';
+import { LessonQuiz } from '@/components/lesson-quiz';
+import { PythonPractice } from '@/components/python-practice';
+import { lessonPractice } from '@/lib/practices';
+import { hasLessonVideo } from '@/lib/lesson-videos';
 export default async function Learn({
   params,
   searchParams,
@@ -21,6 +25,8 @@ export default async function Learn({
   }>;
   searchParams: Promise<{
     success?: string;
+    quizError?: string;
+    quizSaved?: string;
   }>;
 }) {
   const { id } = await params;
@@ -64,7 +70,13 @@ export default async function Learn({
       user.id,
       id,
     ));
-  const materials = await listMaterials(id, user?.id);
+  const [materials, practice, storedVideo] = await Promise.all([
+    listMaterials(id, user?.id),
+    lessonPractice(id, user?.id),
+    hasLessonVideo(id),
+  ]);
+  const query = await searchParams;
+  const videoSrc = storedVideo ? `/learn/${id}/video` : lesson.video_url;
   const body = lesson.body
     .split('\n\n')
     .filter(Boolean)
@@ -108,7 +120,7 @@ export default async function Learn({
               </ul>
             </section>
           )}
-          {lesson.video_url && <VideoPlayer src={lesson.video_url} />}
+          {videoSrc && <VideoPlayer src={videoSrc} />}
           <DocumentMaterials materials={materials} />
           {materials.length ? (
             <details className="panel lesson-overview">
@@ -118,6 +130,14 @@ export default async function Learn({
           ) : (
             <div className="panel lesson-body">{body}</div>
           )}
+          {practice && <PythonPractice key={id} lessonId={id} practice={practice} />}
+          <LessonQuiz
+            lessonId={id}
+            userId={user?.id}
+            enrolled={enrolled}
+            error={query.quizError}
+            saved={query.quizSaved}
+          />
           <div className="lesson-actions">
             {enrolled ? (
               done ? (

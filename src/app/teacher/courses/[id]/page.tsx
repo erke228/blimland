@@ -91,6 +91,9 @@ export default async function CourseEditor({
         description={`Күйі: ${statusLabel[course.status]} · ${lessons.length} дәріс`}
       >
         <div className="editor-heading-actions">
+          <Link className="button outline" href={`/teacher/courses/${id}/assessment`}>
+            Тест жауаптарын тексеру
+          </Link>
           <Link className="button outline" href={`/courses/${id}`}>
             <Eye size={17} />
             Алдын ала көру

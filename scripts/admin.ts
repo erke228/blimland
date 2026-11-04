@@ -9,7 +9,7 @@ if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
   process.exit(1);
 }
 loadEnvironment();
-if(!usesPostgres()) await migrate();
+if (!usesPostgres()) await migrate();
 if (await one("SELECT id FROM users WHERE role = 'admin'")) {
   console.error('The super administrator already exists. A second owner cannot be created.');
   process.exit(1);

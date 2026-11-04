@@ -37,7 +37,7 @@ export async function lectureCatalog(filters: CatalogFilters = {}) {
     await all<LectureListing>(`SELECT l.id,l.title,s.course_id,c.title course_title,c.category,c.level,u.name teacher,c.owner_id,s.title section_title,l.duration_minutes,l.is_preview,c.updated_at,
     EXISTS(SELECT 1 FROM lesson_materials m WHERE m.lesson_id=l.id AND m.kind='pdf' AND m.removed_at IS NULL) has_pdf,
     EXISTS(SELECT 1 FROM lesson_materials m WHERE m.lesson_id=l.id AND m.kind='docx' AND m.removed_at IS NULL) has_docx,
-    (l.video_url!='') has_video,(l.body!='') has_text
+    (l.video_url!='' OR EXISTS(SELECT 1 FROM lesson_videos v WHERE v.lesson_id=l.id)) has_video,(l.body!='') has_text
     FROM lessons l JOIN sections s ON s.id=l.section_id JOIN courses c ON c.id=s.course_id JOIN users u ON u.id=c.owner_id
     WHERE c.status='published' AND NOT EXISTS(SELECT 1 FROM section_trash t WHERE t.section_id=s.id)
     ORDER BY c.updated_at DESC,s.position,l.position,l.id`);

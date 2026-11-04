@@ -90,12 +90,8 @@ async function orderedLessons(sectionId: string) {
   ).map((row) => row.id);
 }
 async function reorder(sectionId: string, ids: string[]) {
-  await Promise.all(
-    ids.map(
-      async (id, index) =>
-        await run('UPDATE lessons SET section_id=?,position=? WHERE id=?', sectionId, index, id),
-    ),
-  );
+  for (const [index, id] of ids.entries())
+    await run('UPDATE lessons SET section_id=?,position=? WHERE id=?', sectionId, index, id);
 }
 export async function writeLesson(
   actorId: string,

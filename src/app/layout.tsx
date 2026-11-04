@@ -16,6 +16,7 @@ import './profile.css';
 import './documents.css';
 import './library.css';
 import './mobile.css';
+import './learning-tools.css';
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
