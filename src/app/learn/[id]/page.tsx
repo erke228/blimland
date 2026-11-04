@@ -157,12 +157,12 @@ export default async function Learn({
                 Курсқа жазылу
               </Link>
             )}
-            {next && (enrolled || owner || next.is_preview) && (
+            {next && (enrolled || owner || !!next.is_preview) && (
               <Link href={`/learn/${next.id}`} className="button outline">
                 Келесі сабақ <ArrowRight size={16} />
               </Link>
             )}
-            {previous && (enrolled || owner || previous.is_preview) && (
+            {previous && (enrolled || owner || !!previous.is_preview) && (
               <Link href={`/learn/${previous.id}`} className="button outline">
                 <ArrowLeft size={16} />
                 Алдыңғы сабақ
