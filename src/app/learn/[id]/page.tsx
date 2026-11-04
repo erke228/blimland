@@ -16,6 +16,7 @@ import { LessonQuiz } from '@/components/lesson-quiz';
 import { PythonPractice } from '@/components/python-practice';
 import { lessonPractice } from '@/lib/practices';
 import { hasLessonVideo } from '@/lib/lesson-videos';
+import { LessonStages } from '@/components/lesson-stages';
 export default async function Learn({
   params,
   searchParams,
@@ -70,10 +71,11 @@ export default async function Learn({
       user.id,
       id,
     ));
-  const [materials, practice, storedVideo] = await Promise.all([
+  const [materials, practice, storedVideo, quizExists] = await Promise.all([
     listMaterials(id, user?.id),
     lessonPractice(id, user?.id),
     hasLessonVideo(id),
+    one('SELECT lesson_id FROM lesson_quizzes WHERE lesson_id=?', id),
   ]);
   const query = await searchParams;
   const videoSrc = storedVideo ? `/learn/${id}/video` : lesson.video_url;
@@ -103,13 +105,15 @@ export default async function Learn({
             </Link>
           )}
           <Notice {...await searchParams} />
-          <div className="lecture-header-cover">
-            <CourseCover course={{ ...course, ...(await lectureCoverPresentation(id)) }} large />
-          </div>
+          {!videoSrc && !materials.length && (
+            <div className="lecture-header-cover">
+              <CourseCover course={{ ...course, ...(await lectureCoverPresentation(id)) }} large />
+            </div>
+          )}
           {lesson.summary && <p className="lecture-summary">{lesson.summary}</p>}
           {lesson.objectives && (
-            <section className="panel lecture-objectives">
-              <h2>Оқу мақсаттары</h2>
+            <details className="panel lecture-objectives">
+              <summary>Оқу мақсаттары</summary>
               <ul>
                 {lesson.objectives
                   .split('\n')
@@ -118,25 +122,47 @@ export default async function Learn({
                     <li key={i}>{goal}</li>
                   ))}
               </ul>
-            </section>
-          )}
-          {videoSrc && <VideoPlayer src={videoSrc} />}
-          <DocumentMaterials materials={materials} />
-          {materials.length ? (
-            <details className="panel lesson-overview">
-              <summary>Дәріс туралы</summary>
-              <div className="lesson-body">{body}</div>
             </details>
-          ) : (
-            <div className="panel lesson-body">{body}</div>
           )}
-          {practice && <PythonPractice key={id} lessonId={id} practice={practice} />}
-          <LessonQuiz
-            lessonId={id}
-            userId={user?.id}
-            enrolled={enrolled}
-            error={query.quizError}
-            saved={query.quizSaved}
+          {!enrolled && !owner && (
+            <div className="lesson-access-note">
+              <strong>Бұл — ашық дәріс.</strong>
+              <p>Барлық дәрісті оқу, тест тапсыру және оқу барысын сақтау үшін курсқа жазылыңыз.</p>
+              <Link className="text-link" href={`/courses/${course.id}`}>
+                Курсқа өту және жазылу →
+              </Link>
+            </div>
+          )}
+          <LessonStages
+            key={id}
+            lesson={
+              <>
+                {videoSrc && <VideoPlayer src={videoSrc} />}
+                <DocumentMaterials materials={materials} />
+                {materials.length ? (
+                  <details className="panel lesson-overview">
+                    <summary>Дәрістің мәтіндік нұсқасы</summary>
+                    <div className="lesson-body">{body}</div>
+                  </details>
+                ) : (
+                  <div className="panel lesson-body">{body}</div>
+                )}
+              </>
+            }
+            practice={
+              practice ? <PythonPractice key={id} lessonId={id} practice={practice} /> : undefined
+            }
+            quiz={
+              quizExists ? (
+                <LessonQuiz
+                  lessonId={id}
+                  userId={user?.id}
+                  enrolled={enrolled}
+                  error={query.quizError}
+                  saved={query.quizSaved}
+                />
+              ) : undefined
+            }
           />
           <div className="lesson-actions">
             {enrolled ? (

@@ -112,3 +112,95 @@
     height: 360px;
   }
 }
+
+.lesson-stages {
+  scroll-margin-top: 90px;
+  margin: 24px 0;
+}
+.lesson-stages > [hidden] {
+  display: none !important;
+}
+.stage-navigation {
+  display: flex;
+  gap: 8px;
+  padding: 6px;
+  background: #e8f1ee;
+  border-radius: 14px;
+}
+.stage-navigation button {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 10px;
+  min-height: 48px;
+  background: transparent;
+  color: #36524d;
+  font: inherit;
+  cursor: pointer;
+}
+.stage-navigation button[aria-pressed='true'] {
+  background: #fff;
+  color: #126c5e;
+  font-weight: 700;
+  box-shadow: 0 2px 6px #123b3212;
+}
+.stage-navigation button:focus-visible {
+  outline: 3px solid #177e6f;
+  outline-offset: 2px;
+}
+.stage-hint {
+  color: #435b55;
+  font-size: 15px;
+  margin: 14px 0 20px;
+}
+.stage-next {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-top: 20px;
+}
+.stage-next span {
+  font-size: 14px;
+  color: #526960;
+}
+.lesson-access-note {
+  border-left: 3px solid #197c6c;
+  background: #eef6f2;
+  padding: 16px;
+  border-radius: 10px;
+  margin: 18px 0;
+}
+.lesson-access-note p {
+  margin: 8px 0;
+}
+.lecture-objectives summary {
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+@media (max-width: 600px) {
+  .stage-navigation {
+    gap: 4px;
+    padding: 4px;
+  }
+  .stage-navigation button {
+    font-size: 14px;
+    gap: 5px;
+  }
+  .stage-navigation button svg,
+  .stage-number {
+    display: none;
+  }
+  .stage-navigation button span {
+    white-space: nowrap;
+  }
+  .stage-next .button {
+    width: 100%;
+  }
+}

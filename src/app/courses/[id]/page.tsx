@@ -83,6 +83,11 @@ export default async function CoursePage({
           </div>
           <div className="course-program">
             <h2>Курс бағдарламасы</h2>
+            <p className="help-text">
+              {accessible
+                ? 'Дәрісті таңдаңыз немесе оқу жолын жалғастырыңыз.'
+                : 'Ашық дәрісті бірден көруге болады. Қалған дәрістер курсқа жазылғаннан кейін ашылады.'}
+            </p>
             {await Promise.all(
               [...new Set(lessons.map((l) => l.section_id))].map(async (section) => (
                 <div className="program-section" key={section}>
@@ -93,17 +98,18 @@ export default async function CoursePage({
                       .map(async (lesson, i) => {
                         const canOpen =
                           accessible || (course.status === 'published' && !!lesson.is_preview);
-                        const done =
-                          !!user &&
-                          !!(await one(
-                            'SELECT lesson_id FROM lesson_progress WHERE user_id = ? AND lesson_id = ? AND completed_at IS NOT NULL',
-                            user.id,
-                            lesson.id,
-                          ));
+                        const done = completed.has(lesson.id);
                         const content = (
                           <>
                             <span className={`lesson-number ${done ? 'done' : ''}`}>
-                              {done ? <CheckCircle2 size={17} /> : String(i + 1).padStart(2, '0')}
+                              {done ? (
+                                <CheckCircle2 size={17} />
+                              ) : (
+                                String(lessons.findIndex((l) => l.id === lesson.id) + 1).padStart(
+                                  2,
+                                  '0',
+                                )
+                              )}
                             </span>
                             <div>
                               <strong>{lesson.title}</strong>
@@ -142,7 +148,7 @@ export default async function CoursePage({
             <span className="eyebrow">КУРСҚА ҚОЛЖЕТІМДІЛІК</span>
             {accessible && first ? (
               <Link className="button primary full-width" href={`/learn/${first.id}`}>
-                Оқуды жалғастыру →
+                {lessons.some((l) => completed.has(l.id)) ? 'Оқуды жалғастыру →' : 'Оқуды бастау →'}
               </Link>
             ) : course.status !== 'published' ? (
               <p className="help-text">Курс жарияланғаннан кейін жазылуға болады.</p>

@@ -86,7 +86,7 @@ export default async function CourseEditor({
   return (
     <>
       <PageHeading
-        eyebrow="ДӘРІСТЕР РЕДАКТОРЫ"
+        eyebrow="КУРС РЕДАКТОРЫ"
         title={course.title}
         description={`Күйі: ${statusLabel[course.status]} · ${lessons.length} дәріс`}
       >
@@ -96,7 +96,7 @@ export default async function CourseEditor({
           </Link>
           <Link className="button outline" href={`/courses/${id}`}>
             <Eye size={17} />
-            Алдын ала көру
+            Курсты көру
           </Link>
           <CourseControls
             id={id}
@@ -109,6 +109,16 @@ export default async function CourseEditor({
         </div>
       </PageHeading>
       <Notice error={query.error} success={query.success} />
+      {writable && (
+        <div className="lesson-access-note">
+          <strong>Курс → Бөлім → Дәріс</strong>
+          <p>
+            Бөлім — тақырыптарды біріктіретін тарау. Дәріс — студент оқитын жеке сабақ. Алдымен
+            бөлімді таңдаңыз, содан кейін дәріс қосып, мәтінін немесе PDF / Word файлын сақтаңыз.
+            Дайын курсты «Басқару» бөлімінен жариялауға жіберіңіз.
+          </p>
+        </div>
+      )}
       <nav className="workspace-tabs" aria-label="Редактор бөлімдері">
         {tabs.map(([key, label]) => (
           <Link

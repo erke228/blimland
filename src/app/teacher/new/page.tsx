@@ -13,7 +13,7 @@ export default async function NewCourse({
     <>
       <PageHeading
         title="Жаңа курс"
-        description="Үш қадам: негізгі мәліметтер, өз баннеріңіз, тексеру."
+        description="Курс — дәрістер жинағы. Алдымен атауы мен мұқабасын сақтайсыз, содан кейін бөлімдер мен жеке дәрістерді қосасыз."
       />
       <Notice {...await searchParams} />
       <CourseWizard />

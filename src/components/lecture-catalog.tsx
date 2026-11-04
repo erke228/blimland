@@ -47,7 +47,7 @@ export async function LectureCatalog({ filters }: { filters: CatalogFilters }) {
       <PageHeading
         eyebrow="ОҚУ КІТАПХАНАСЫ"
         title="Пәндер мен курстар"
-        description="Тақырып, пән немесе оқытушы бойынша дәрісті табыңыз."
+        description="Курс — бір тақырыпқа біріктірілген дәрістер жинағы. Алдымен курсты таңдаңыз немесе жеке дәрісті іздеңіз."
       />
       <div className="library-summary">
         <span>
@@ -305,7 +305,7 @@ export async function LectureCatalog({ filters }: { filters: CatalogFilters }) {
                           className="text-link"
                           href={readable ? `/learn/${l.id}` : `/courses/${l.course_id}`}
                         >
-                          {readable ? 'Дәрісті ашу' : 'Курсқа өту'}
+                          {readable ? 'Дәрісті ашу' : 'Курсқа жазылып оқу'}
                           <ArrowUpRight size={16} />
                         </Link>
                       </div>
