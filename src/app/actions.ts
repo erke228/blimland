@@ -210,6 +210,7 @@ async function editorAction(
   form: FormData,
   work: (actorId: string, courseId: string) => void | Promise<unknown>,
   anchor = '',
+  returnPane?: 'structure' | 'lecture' | 'materials' | 'cover' | 'settings' | 'manage',
 ) {
   const user = await requireRole('teacher', 'admin');
   const id = value(form, 'courseId');
@@ -224,13 +225,14 @@ async function editorAction(
   revalidatePath(`/teacher/courses/${id}`);
   revalidatePath(`/courses/${id}`);
   const tab =
-    anchor.includes('lecture-cover') || anchor === '#cover'
+    returnPane ||
+    (anchor.includes('lecture-cover') || anchor === '#cover'
       ? 'cover'
       : anchor === '#settings'
         ? 'settings'
         : anchor.includes('materials')
           ? 'materials'
-          : 'structure';
+          : 'structure');
   redirect(`/teacher/courses/${id}?success=saved&tab=${tab}${anchor}`);
 }
 export async function saveCourseDetails(form: FormData) {
@@ -258,10 +260,23 @@ export async function selectLectureCover(form: FormData) {
 }
 export async function reopenCourseForEditing(form: FormData) {
   const lessonId = value(form, 'lessonId');
+  const requestedPane = value(form, 'returnPane');
+  const pane =
+    requestedPane === 'structure' ||
+    requestedPane === 'lecture' ||
+    requestedPane === 'materials' ||
+    requestedPane === 'cover' ||
+    requestedPane === 'settings' ||
+    requestedPane === 'manage'
+      ? requestedPane
+      : lessonId
+        ? 'lecture'
+        : 'structure';
   return await editorAction(
     form,
     reopenCourse,
-    lessonId ? `&lesson=${encodeURIComponent(lessonId)}#materials` : '',
+    lessonId ? `&lesson=${encodeURIComponent(lessonId)}` : '',
+    pane,
   );
 }
 export async function removeSection(form: FormData) {

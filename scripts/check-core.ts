@@ -529,6 +529,37 @@ try {
   const publishedEditor = await teacher.html(`${editorPath}?tab=materials&lesson=${lessonId}`);
   assert(publishedEditor.includes('PDF және Word материалдары'));
   assert(publishedEditor.includes('Құжат қосу үшін өңдеуді ашу'));
+  // Reopening must preserve the teacher's task, without trusting arbitrary redirect input.
+  for (const [selectedPane, requestedPane, expectedPane, selectedLesson] of [
+    ['lecture', 'lecture', 'lecture', lessonId],
+    ['materials', 'materials', 'materials', lessonId],
+    ['settings', 'settings', 'settings', lessonId],
+    ['lecture', 'lecture', 'lecture', 'new'],
+    ['lecture', 'https://outside.invalid/?tab=manage', 'lecture', lessonId],
+  ]) {
+    const source = `${editorPath}?tab=${selectedPane}&lesson=${selectedLesson}`;
+    const sourceHtml = await teacher.html(source);
+    assert(sourceHtml.includes(`name="returnPane" value="${selectedPane}"`));
+    const reopened = await teacher.submit(
+      source,
+      { courseId: id, lessonId: selectedLesson, returnPane: requestedPane },
+      'Өңдеуге ашу',
+      sourceHtml,
+    );
+    const destination = new URL(reopened, origin);
+    assert.equal(destination.origin, origin);
+    assert.equal(destination.pathname, editorPath);
+    assert.equal(destination.searchParams.get('tab'), expectedPane);
+    assert.equal(destination.searchParams.get('lesson'), selectedLesson);
+    const editablePage = await teacher.html(reopened);
+    assert(editablePage.includes('Курс → Бөлім → Дәріс'));
+    await teacher.submit(`${editorPath}?tab=manage`, { courseId: id }, 'Тексеруге жіберу');
+    await admin.submit(
+      '/admin/review',
+      { courseId: id, decision: 'published' },
+      'value="published"',
+    );
+  }
   for (const [role, browser] of [
     ['guest', guest],
     ['student', student],

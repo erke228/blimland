@@ -161,7 +161,12 @@ export default async function CourseEditor({
           {!archived && (
             <form action={reopenCourseForEditing}>
               <input type="hidden" name="courseId" value={id} />
-              <input type="hidden" name="lessonId" value={editing?.id || ''} />
+              <input
+                type="hidden"
+                name="lessonId"
+                value={query.lesson === 'new' ? 'new' : editing?.id || ''}
+              />
+              <input type="hidden" name="returnPane" value={pane} />
               <SubmitButton className="button outline">
                 <Pencil size={16} />
                 Өңдеуге ашу
