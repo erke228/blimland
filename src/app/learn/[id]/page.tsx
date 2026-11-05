@@ -18,6 +18,7 @@ import { lessonPractice } from '@/lib/practices';
 import { hasLessonVideo } from '@/lib/lesson-videos';
 import { LessonStages } from '@/components/lesson-stages';
 import { LectureText } from '@/components/lecture-text';
+import { videoPosition } from '@/lib/video-progress';
 export default async function Learn({
   params,
   searchParams,
@@ -71,6 +72,10 @@ export default async function Learn({
     one('SELECT lesson_id FROM lesson_quizzes WHERE lesson_id=?', id),
   ]);
   const videoSrc = storedVideo ? `/learn/${id}/video` : lesson.video_url;
+  const resume =
+    videoSrc && enrolled && user && !previewMode && course.status === 'published'
+      ? { lessonId: id, initialPosition: await videoPosition(user.id, id) }
+      : undefined;
   const body = <LectureText text={lesson.body} />;
   return (
     <>
@@ -144,7 +149,7 @@ export default async function Learn({
             key={id}
             lesson={
               <>
-                {videoSrc && <VideoPlayer src={videoSrc} />}
+                {videoSrc && <VideoPlayer key={id} src={videoSrc} progress={resume} />}
                 <DocumentMaterials materials={materials} />
                 {materials.length ? (
                   <details className="panel lesson-overview">

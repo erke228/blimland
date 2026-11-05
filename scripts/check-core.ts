@@ -595,6 +595,68 @@ try {
   const enrollmentForm = await student.html(`/courses/${id}`);
   await student.submit(`/courses/${id}`, { courseId: id }, 'name="courseId"', enrollmentForm);
   assert.equal((await student.get(`/learn/${lessonId}`)).status, 200);
+  await run(
+    "UPDATE lessons SET video_url='https://video.invalid/fixture.mp4' WHERE id=?",
+    lessonId,
+  );
+  const resumePath = `/learn/${lessonId}/video/progress`;
+  async function saveResume(cookie: string, position: string, requestOrigin = origin) {
+    const body = new FormData();
+    body.set('position', position);
+    body.set('userId', quizOwnerForResume);
+    body.set('completed_at', '999');
+    body.set('points', '999');
+    return fetch(`${origin}${resumePath}`, {
+      method: 'POST',
+      body,
+      headers: { cookie, origin: requestOrigin },
+      redirect: 'manual',
+    });
+  }
+  const quizOwnerForResume = (await one<{ id: string }>(
+    'SELECT owner_id id FROM courses WHERE id=?',
+    id,
+  ))!.id;
+  assert.equal((await saveResume('', '10')).status, 401);
+  assert.equal((await saveResume(teacher.cookie, '10')).status, 403);
+  assert.equal((await saveResume(student.cookie, '10', 'https://outside.invalid')).status, 403);
+  for (const bad of ['', 'NaN', 'Infinity', '-1', '86401'])
+    assert.equal((await saveResume(student.cookie, bad)).status, 400);
+  assert.equal((await saveResume(student.cookie, 'x'.repeat(3000))).status, 413);
+  assert.equal((await saveResume(student.cookie, '12.5')).status, 204);
+  const resumeStudent = (await one<{ id: string }>(
+    "SELECT id FROM users WHERE email='student@integration.invalid'",
+  ))!.id;
+  const resumeRow = (await one<{ video_position: number; completed_at: number | null }>(
+    'SELECT video_position,completed_at FROM lesson_progress WHERE user_id=? AND lesson_id=?',
+    resumeStudent,
+    lessonId,
+  ))!;
+  assert.equal(resumeRow.video_position, 12.5);
+  assert.equal(resumeRow.completed_at, null);
+  assert(
+    !(await one(
+      'SELECT user_id FROM lesson_progress WHERE user_id=? AND lesson_id=?',
+      quizOwnerForResume,
+      lessonId,
+    )),
+  );
+  assert((await student.html(`/learn/${lessonId}`)).includes('Қараған жеріңіз сақталады'));
+  assert(
+    !(await teacher.html(`/learn/${lessonId}?preview=student`)).includes(
+      'Қараған жеріңіз сақталады',
+    ),
+  );
+  await saveResume(student.cookie, '3');
+  assert.equal(
+    (await one<{ video_position: number }>(
+      'SELECT video_position FROM lesson_progress WHERE user_id=? AND lesson_id=?',
+      resumeStudent,
+      lessonId,
+    ))!.video_position,
+    3,
+  );
+  await run("UPDATE lessons SET video_url='' WHERE id=?", lessonId);
   const enrolledFile = await student.get(filePath);
   assert.equal(enrolledFile.status, 200);
   assert.equal(enrolledFile.headers.get('content-type'), 'application/pdf');
