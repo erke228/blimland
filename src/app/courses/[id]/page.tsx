@@ -86,7 +86,7 @@ export default async function CoursePage({
             <p className="help-text">
               {accessible
                 ? 'Дәрісті таңдаңыз немесе оқу жолын жалғастырыңыз.'
-                : 'Ашық дәрісті бірден көруге болады. Қалған дәрістер курсқа жазылғаннан кейін ашылады.'}
+                : 'Барлық дәрісті кез келген ретпен ашуға болады. Оқу барысын сақтау үшін курсқа жазылыңыз.'}
             </p>
             {await Promise.all(
               [...new Set(lessons.map((l) => l.section_id))].map(async (section) => (
@@ -96,8 +96,7 @@ export default async function CoursePage({
                     lessons
                       .filter((l) => l.section_id === section)
                       .map(async (lesson, i) => {
-                        const canOpen =
-                          accessible || (course.status === 'published' && !!lesson.is_preview);
+                        const canOpen = accessible || course.status === 'published';
                         const done = completed.has(lesson.id);
                         const content = (
                           <>
@@ -115,7 +114,7 @@ export default async function CoursePage({
                               <strong>{lesson.title}</strong>
                               <span>
                                 {lesson.duration_minutes} мин
-                                {lesson.is_preview ? ' · Ашық сабақ' : ''}
+                                {course.status === 'published' ? ' · Ашық сабақ' : ''}
                               </span>
                             </div>
                             {canOpen ? <PlayCircle size={20} /> : <LockKeyhole size={18} />}
@@ -145,7 +144,7 @@ export default async function CoursePage({
         <aside className="panel enrollment-panel">
           <CourseCover course={course} large />
           <div className="enrollment-content">
-            <span className="eyebrow">КУРСҚА ҚОЛЖЕТІМДІЛІК</span>
+            <span className="eyebrow">ОҚУ БАРЫСЫН САҚТАУ</span>
             {accessible && first ? (
               <Link className="button primary full-width" href={`/learn/${first.id}`}>
                 {lessons.some((l) => completed.has(l.id)) ? 'Оқуды жалғастыру →' : 'Оқуды бастау →'}
@@ -157,7 +156,7 @@ export default async function CoursePage({
                 href={`/login?next=${encodeURIComponent(`/courses/${course.id}`)}`}
                 className="button primary full-width"
               >
-                Кіру және жазылу →
+                Кіру және оқу барысын сақтау →
               </Link>
             ) : (
               <form action={enroll}>

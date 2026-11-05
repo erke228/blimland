@@ -116,7 +116,8 @@ test('assessment and practice access: draft, unregistered, unrelated teacher, bl
   assert.equal(await practiceDownload(lesson, outsider), undefined);
   await assert.rejects(() => reviewQueue(foreign, course), denied);
   await run("UPDATE courses SET status='published' WHERE id=?", course);
-  await assert.rejects(() => publicQuiz(lesson, outsider), denied);
+  assert(await publicQuiz(lesson, outsider));
+  assert(await publicQuiz(lesson));
   await assert.rejects(() =>
     submitQuiz(outsider, lesson, randomUUID(), { [choice]: '1', [written]: 'test' }),
   );
@@ -194,6 +195,13 @@ test('private videos reject overlong clips and enforce lecture access', async ()
   assert((await readableVideo(lesson, teacher))!.buffer!.equals(bytes));
   await run("UPDATE courses SET status='published' WHERE id=?", course);
   assert((await readableVideo(lesson, student))!.buffer!.equals(bytes));
+  assert((await readableVideo(lesson))!.buffer!.equals(bytes));
+  assert((await readableVideo(lesson, outsider))!.buffer!.equals(bytes));
+  assert(await practiceDownload(lesson));
+  await run("UPDATE courses SET status='archived' WHERE id=?", course);
+  assert.equal(await readableVideo(lesson), undefined);
+  assert.equal(await practiceDownload(lesson), undefined);
+  await run("UPDATE courses SET status='published' WHERE id=?", course);
 });
 test('permanent course deletion removes video metadata and drains durable cleanup queue', async () => {
   const admin =

@@ -76,6 +76,8 @@ test('PDF is stored privately and requires current lesson access on every reques
   assert.equal(await readMaterial(file, foreign), undefined);
   await assert.rejects(async () => await listMaterials(id, student), code('forbidden'));
   await run("UPDATE courses SET status = 'published' WHERE id = ?", id);
+  assert((await readMaterial(file))?.buffer.equals(bytes));
+  assert((await readMaterial(file, foreign))?.buffer.equals(bytes));
   await run('INSERT INTO enrollments VALUES (?,?,?)', student, id, Date.now());
   assert((await readMaterial(file, student))?.buffer.equals(bytes));
   assert(!JSON.stringify(await listMaterials(id, student)).includes('storage_key'));

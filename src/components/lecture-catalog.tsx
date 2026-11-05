@@ -10,28 +10,15 @@ import {
   Clock3,
   ArrowUpRight,
   GraduationCap,
-  LockKeyhole,
   PlayCircle,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
 import { lectureCatalog, type CatalogFilters } from '@/lib/lecture-catalog';
-import { currentUser } from '@/lib/auth';
-import { all } from '@/lib/db';
 import { CourseCard, CourseCover, EmptyState, PageHeading } from './ui';
 import { MobileDisclosure } from './mobile-disclosure';
 export async function LectureCatalog({ filters }: { filters: CatalogFilters }) {
-  const data = await lectureCatalog(filters),
-    user = await currentUser();
-  const enrolled = new Set(
-    user
-      ? (
-          await all<{
-            course_id: string;
-          }>('SELECT course_id FROM enrollments WHERE user_id=?', user.id)
-        ).map((e) => e.course_id)
-      : [],
-  );
+  const data = await lectureCatalog(filters);
   const href = (changes: Record<string, string>) =>
     '/courses?' +
     new URLSearchParams(
@@ -150,13 +137,6 @@ export async function LectureCatalog({ filters }: { filters: CatalogFilters }) {
                   <option value="text">Мәтін</option>
                 </select>
               </label>
-              <label>
-                Қолжетімділік
-                <select name="access" defaultValue={filters.access || ''}>
-                  <option value="">Барлық дәріс</option>
-                  <option value="open">Тіркелмей ашылатын</option>
-                </select>
-              </label>
               <input type="hidden" name="view" value={data.view} />
               <input type="hidden" name="sort" value={filters.sort || ''} />
               <button className="button primary full-width">
@@ -228,18 +208,10 @@ export async function LectureCatalog({ filters }: { filters: CatalogFilters }) {
           ) : (
             <div className="lecture-list">
               {data.results.map((l) => {
-                const readable =
-                  !!l.is_preview ||
-                  (!!user &&
-                    (user.role === 'admin' || user.id === l.owner_id || enrolled.has(l.course_id)));
                 const course = data.courseMap.get(l.course_id)!;
                 return (
                   <article key={l.id} className="lecture-list-card">
-                    <Link
-                      className="lecture-list-art"
-                      href={readable ? `/learn/${l.id}` : `/courses/${l.course_id}`}
-                      aria-label={l.title}
-                    >
+                    <Link className="lecture-list-art" href={`/learn/${l.id}`} aria-label={l.title}>
                       <CourseCover course={course} />
                     </Link>
                     <div className="lecture-list-body">
@@ -250,15 +222,12 @@ export async function LectureCatalog({ filters }: { filters: CatalogFilters }) {
                         >
                           {l.category}
                         </Link>
-                        <span className={`lecture-access ${readable ? 'open' : ''}`}>
-                          {readable ? <PlayCircle size={13} /> : <LockKeyhole size={13} />}{' '}
-                          {l.is_preview ? 'Ашық дәріс' : readable ? 'Қолжетімді' : 'Курсқа жазылу'}
+                        <span className="lecture-access open">
+                          <PlayCircle size={13} /> Ашық дәріс
                         </span>
                       </div>
                       <h2>
-                        <Link href={readable ? `/learn/${l.id}` : `/courses/${l.course_id}`}>
-                          {l.title}
-                        </Link>
+                        <Link href={`/learn/${l.id}`}>{l.title}</Link>
                       </h2>
                       <Link className="lecture-parent" href={`/courses/${l.course_id}`}>
                         {l.course_title} · {l.section_title}
@@ -301,11 +270,8 @@ export async function LectureCatalog({ filters }: { filters: CatalogFilters }) {
                             </span>
                           )}
                         </div>
-                        <Link
-                          className="text-link"
-                          href={readable ? `/learn/${l.id}` : `/courses/${l.course_id}`}
-                        >
-                          {readable ? 'Дәрісті ашу' : 'Курсқа жазылып оқу'}
+                        <Link className="text-link" href={`/learn/${l.id}`}>
+                          Дәрісті ашу
                           <ArrowUpRight size={16} />
                         </Link>
                       </div>

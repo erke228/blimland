@@ -48,7 +48,6 @@ export async function lectureCatalog(filters: CatalogFilters = {}) {
     (!filters.category || l.category === filters.category) &&
     (!filters.teacher || l.owner_id === filters.teacher) &&
     (!filters.level || l.level === filters.level) &&
-    (filters.access !== 'open' || !!l.is_preview) &&
     (!['pdf', 'docx', 'video', 'text'].includes(filters.format || '') ||
       !!l[`has_${filters.format}` as 'has_pdf']);
   let results = lectures.filter(matches);

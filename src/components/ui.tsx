@@ -40,14 +40,7 @@ export function CourseCard({ course, progress }: { course: Course; progress?: nu
         </h3>
         <p className="course-description">{course.description}</p>
         {course.first_lesson_id && (
-          <Link
-            className="first-lecture-link"
-            href={
-              course.first_lesson_preview
-                ? `/learn/${course.first_lesson_id}`
-                : `/courses/${course.id}`
-            }
-          >
+          <Link className="first-lecture-link" href={`/learn/${course.first_lesson_id}`}>
             <BookOpen size={17} />
             <span>
               <small>АЛҒАШҚЫ ДӘРІС</small>

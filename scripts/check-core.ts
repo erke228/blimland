@@ -554,8 +554,8 @@ try {
   }
   assert.equal((await guest.get(coverPath)).status, 200);
   assert.equal((await guest.get(lectureCoverPath)).status, 200);
-  assert(!(await guest.html(`/learn/${lessonId}`)).includes('PRIVATE-LESSON-CONTENT'));
-  assert(!(await student.html(`/learn/${lessonId}`)).includes('PRIVATE-LESSON-CONTENT'));
+  assert((await guest.html(`/learn/${lessonId}`)).includes('PRIVATE-LESSON-CONTENT'));
+  assert((await student.html(`/learn/${lessonId}`)).includes('PRIVATE-LESSON-CONTENT'));
   const enrollmentForm = await student.html(`/courses/${id}`);
   await student.submit(`/courses/${id}`, { courseId: id }, 'name="courseId"', enrollmentForm);
   assert.equal((await student.get(`/learn/${lessonId}`)).status, 200);
@@ -657,7 +657,7 @@ try {
     'name="password"',
   );
   assert.equal(unsafeDestination, '/admin');
-  assert(!(await guest.html(`/learn/${lessonId}?preview=student`)).includes('python-practice'));
+  assert(!(await guest.html(`/learn/${lessonId}?preview=student`)).includes('Редакторға оралу'));
   assert(quizHtml.includes('knowledge-check') && quizHtml.includes('python-practice'));
   assert(!quizHtml.includes('HIDDEN-HTTP-QUIZ-KEY') && !quizHtml.includes('HIDDEN-HTTP-SAMPLE'));
   const submissionKey = randomUUID();
@@ -677,7 +677,7 @@ try {
       quizResult.includes('Қысқа жауаптар оқытушының тексеруін күтуде'),
   );
   assert.equal((await student.get(`/learn/${lessonId}/practice?format=py`)).status, 200);
-  assert.equal((await guest.get(`/learn/${lessonId}/practice`)).status, 404);
+  assert.equal((await guest.get(`/learn/${lessonId}/practice`)).status, 200);
   assert.equal((await student.get(`/teacher/courses/${id}/assessment`)).status, 307);
   const attempts = await teacher.html(`/teacher/courses/${id}/assessment`);
   assert(attempts.includes('Екіге үшті қосамыз.') && attempts.includes('HIDDEN-HTTP-SAMPLE'));
@@ -700,7 +700,7 @@ try {
   await run('UPDATE lessons SET is_preview = 1 WHERE id = ?', lessonId);
   assert.equal((await guest.get(filePath)).status, 200);
   await run('UPDATE lessons SET is_preview = 0 WHERE id = ?', lessonId);
-  assert.equal((await guest.get(filePath)).status, 404);
+  assert.equal((await guest.get(filePath)).status, 200);
   assert((await student.html(`/learn/${lessonId}`)).includes('PRIVATE-LESSON-CONTENT'));
   await student.submit(`/learn/${lessonId}`, { lessonId }, 'Оқып шықтым');
   assert.match(await student.html('/dashboard'), /<progress[^>]*value="100"/);
@@ -710,7 +710,7 @@ try {
     }>('SELECT COUNT(*) n FROM lesson_progress WHERE completed_at IS NOT NULL'))!.n,
     1,
   );
-  assert(!(await guest.html(`/learn/${lessonId}`)).includes('PRIVATE-LESSON-CONTENT'));
+  assert((await guest.html(`/learn/${lessonId}`)).includes('PRIVATE-LESSON-CONTENT'));
   const oldCookie = student.cookie;
   await student.submit('/dashboard', {}, 'Шығу');
   student.cookie = oldCookie;

@@ -52,17 +52,6 @@ export default async function Learn({
       course.id,
       user.id,
     ));
-  if (!owner && !enrolled && !lesson.is_preview)
-    return (
-      <div className="empty-state">
-        <LockKeyhole size={32} />
-        <h1>Бұл сабаққа жазылу қажет</h1>
-        <p>Курс бетінде қолжетімділік шарттарын қараңыз.</p>
-        <Link href={`/courses/${course.id}`} className="button primary">
-          Курсқа өту
-        </Link>
-      </div>
-    );
   const lessons = await courseLessons(course.id);
   const index = lessons.findIndex((item) => item.id === id);
   const next = lessons[index + 1];
@@ -144,7 +133,10 @@ export default async function Learn({
           {!enrolled && !owner && (
             <div className="lesson-access-note">
               <strong>Бұл — ашық дәріс.</strong>
-              <p>Барлық дәрісті оқу, тест тапсыру және оқу барысын сақтау үшін курсқа жазылыңыз.</p>
+              <p>
+                Дәрістерді кез келген ретпен оқи аласыз. Тест нәтижелері мен оқу барысын сақтау үшін
+                курсқа жазылыңыз.
+              </p>
               <Link className="text-link" href={`/courses/${course.id}`}>
                 Курсқа өту және жазылу →
               </Link>
@@ -200,10 +192,10 @@ export default async function Learn({
               )
             ) : (
               <Link href={`/courses/${course.id}`} className="button primary">
-                Курсқа жазылу
+                Оқу барысын сақтау
               </Link>
             )}
-            {next && (enrolled || owner || !!next.is_preview) && (
+            {next && (
               <Link
                 href={`/learn/${next.id}${previewMode ? '?preview=student' : ''}`}
                 className="button outline"
@@ -211,7 +203,7 @@ export default async function Learn({
                 Келесі сабақ <ArrowRight size={16} />
               </Link>
             )}
-            {previous && (enrolled || owner || !!previous.is_preview) && (
+            {previous && (
               <Link
                 href={`/learn/${previous.id}${previewMode ? '?preview=student' : ''}`}
                 className="button outline"
@@ -229,23 +221,16 @@ export default async function Learn({
             desktopHeading
             className="lesson-outline"
           >
-            {lessons.map((item, i) =>
-              enrolled || owner || item.is_preview ? (
-                <Link
-                  key={item.id}
-                  className={`lesson-nav ${item.id === id ? 'selected' : ''}`}
-                  href={`/learn/${item.id}${previewMode ? '?preview=student' : ''}`}
-                >
-                  <span>{i + 1}</span>
-                  {item.title}
-                </Link>
-              ) : (
-                <div className="lesson-nav muted" key={item.id}>
-                  <LockKeyhole size={15} />
-                  {item.title}
-                </div>
-              ),
-            )}
+            {lessons.map((item, i) => (
+              <Link
+                key={item.id}
+                className={`lesson-nav ${item.id === id ? 'selected' : ''}`}
+                href={`/learn/${item.id}${previewMode ? '?preview=student' : ''}`}
+              >
+                <span>{i + 1}</span>
+                {item.title}
+              </Link>
+            ))}
           </MobileDisclosure>
         </aside>
       </div>

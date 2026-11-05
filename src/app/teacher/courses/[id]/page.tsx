@@ -480,17 +480,10 @@ export default async function CourseEditor({
                         defaultValue={editing?.duration_minutes || 45}
                       />
                     </label>
-                    <label className="checkbox-label">
-                      <input
-                        type="checkbox"
-                        name="preview"
-                        defaultChecked={!!editing?.is_preview}
-                      />
-                      Танысу үшін ашық дәріс
-                    </label>
+                    {editing?.is_preview ? <input type="hidden" name="preview" value="on" /> : null}
                     <p className="help-text">
-                      Ашық дәрісті курс жарияланғаннан кейін қонақтар да оқи алады. Басқа дәрістер
-                      курсқа жазылған студенттерге қолжетімді.
+                      Курс жарияланғаннан кейін барлық дәріс ашық болады. Студенттер оларды кез
+                      келген ретпен оқи алады; жазылу оқу барысын сақтау үшін қажет.
                     </p>
                     <SubmitButton>
                       {editing ? 'Өзгерістерді сақтау' : 'Дәрісті және құжатты сақтау'}

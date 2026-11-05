@@ -34,17 +34,7 @@ export async function canReadLesson(lessonId: string, viewerId?: string) {
   if (!lesson) return false;
   const viewer = viewerId ? await actor(viewerId) : undefined;
   if (viewer && (viewer.role === 'admin' || lesson.owner_id === viewer.id)) return true;
-  return (
-    !lesson.section_removed &&
-    lesson.status === 'published' &&
-    (!!lesson.is_preview ||
-      (!!viewer &&
-        !!(await one(
-          'SELECT user_id FROM enrollments WHERE course_id = ? AND user_id = ?',
-          lesson.course_id,
-          viewer.id,
-        ))))
-  );
+  return !lesson.section_removed && lesson.status === 'published';
 }
 export async function editableLesson(viewerId: string, lessonId: string) {
   const viewer = await actor(viewerId, ['teacher', 'admin']);
