@@ -507,7 +507,8 @@ try {
     'value="yes"',
   );
   assert.equal((await teacher.get(filePath)).status, 200);
-  await teacher.submit(editorPath, { courseId: id }, 'Тексеруге жіберу');
+  await teacher.submit(`${editorPath}?tab=manage`, { courseId: id }, 'Тексеруге жіберу');
+  assert((await teacher.html(editorPath)).includes('Курс тексерілуде'));
   await admin.submit('/admin/review', { courseId: id, decision: 'published' }, 'value="published"');
   const managementHome = await admin.html('/admin');
   assert(managementHome.includes('management-hub'));
