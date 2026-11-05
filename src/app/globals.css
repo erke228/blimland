@@ -1438,6 +1438,17 @@ a.program-lesson:hover {
   padding: 3px 10px;
   margin-left: 8px;
 }
+.video-tools label {
+  color: inherit;
+  font-size: 14px;
+}
+.video-progress-note {
+  margin: 0;
+  padding: 0 15px 15px;
+  color: #e2eee8;
+  font-size: 14px;
+  line-height: 1.65;
+}
 .video-container .notice {
   margin: 10px;
 }

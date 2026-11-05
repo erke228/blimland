@@ -118,7 +118,9 @@ export function VideoPlayer({
         </label>
       </div>
       {progress && (
-        <p className="muted">Қараған жеріңіз сақталады. Бейне көру дәрісті автоматты аяқтамайды.</p>
+        <p className="video-progress-note">
+          Қараған жеріңіз сақталады. Бейне көру дәрісті автоматты аяқтамайды.
+        </p>
       )}
       {saveError && (
         <div className="notice error" role="status">
