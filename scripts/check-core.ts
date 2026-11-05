@@ -625,6 +625,38 @@ try {
     '5',
   );
   const quizHtml = await student.html(`/learn/${lessonId}`);
+  const ownerPreview = await teacher.html(`/learn/${lessonId}?preview=student`);
+  assert(ownerPreview.includes('Редакторға оралу'));
+  assert(
+    !ownerPreview.includes('Жауаптарды тексеруге жіберу') &&
+      !ownerPreview.includes('Оқып шықтым ✓'),
+  );
+  assert(!(await student.html(`/learn/${lessonId}?preview=student`)).includes('Редакторға оралу'));
+  const returnCheck = new Browser();
+  const chosen = `/learn/${lessonId}#knowledge-check`;
+  const loginPath = `/login?next=${encodeURIComponent(chosen)}`;
+  const failedLogin = await returnCheck.submit(
+    loginPath,
+    { email: 'student@integration.invalid', password: 'wrong', next: chosen },
+    'name="password"',
+  );
+  assert(new URL(failedLogin, origin).searchParams.get('next') === chosen);
+  assert.equal(
+    await returnCheck.submit(
+      loginPath,
+      { email: 'student@integration.invalid', password, next: chosen },
+      'name="password"',
+    ),
+    chosen,
+  );
+  const unsafeReturnCheck = new Browser();
+  const unsafeDestination = await unsafeReturnCheck.submit(
+    '/login',
+    { email: adminEmail, password, next: '//evil.example' },
+    'name="password"',
+  );
+  assert.equal(unsafeDestination, '/admin');
+  assert(!(await guest.html(`/learn/${lessonId}?preview=student`)).includes('python-practice'));
   assert(quizHtml.includes('knowledge-check') && quizHtml.includes('python-practice'));
   assert(!quizHtml.includes('HIDDEN-HTTP-QUIZ-KEY') && !quizHtml.includes('HIDDEN-HTTP-SAMPLE'));
   const submissionKey = randomUUID();

@@ -16,16 +16,18 @@ export async function LessonQuiz({
   enrolled,
   error,
   saved,
+  preview = false,
 }: {
   lessonId: string;
   userId?: string;
   enrolled: boolean;
   error?: string;
   saved?: string;
+  preview?: boolean;
 }) {
   const quiz = await publicQuiz(lessonId, userId);
   if (!quiz) return null;
-  const attempt = userId ? await latestAttempt(userId, lessonId) : undefined;
+  const attempt = userId && !preview ? await latestAttempt(userId, lessonId) : undefined;
   const feedback = attempt && userId ? await ownAttemptFeedback(userId, attempt.id) : [];
   const max = quiz.questions.reduce((s, q) => s + q.points, 0);
   return (
@@ -106,11 +108,16 @@ export async function LessonQuiz({
           <SubmitButton>Жауаптарды тексеруге жіберу</SubmitButton>
         ) : (
           <p className="help-text">
-            {userId ? (
+            {preview ? (
+              'Оқушы көрінісінде жауап жіберілмейді және баға сақталмайды.'
+            ) : userId ? (
               'Жауап беру үшін курс бетінде курсқа жазылыңыз.'
             ) : (
               <>
-                <Link href="/login" className="text-link">
+                <Link
+                  href={`/login?next=${encodeURIComponent(`/learn/${lessonId}#knowledge-check`)}`}
+                  className="text-link"
+                >
                   Кіріңіз
                 </Link>{' '}
                 және курсқа жазылыңыз.

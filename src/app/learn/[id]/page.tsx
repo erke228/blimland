@@ -28,6 +28,7 @@ export default async function Learn({
     success?: string;
     quizError?: string;
     quizSaved?: string;
+    preview?: string;
   }>;
 }) {
   const { id } = await params;
@@ -41,6 +42,8 @@ export default async function Learn({
   const course = (await getCourse(lesson.course_id))!;
   const user = await currentUser();
   const owner = !!user && (course.owner_id === user.id || user.role === 'admin');
+  const query = await searchParams;
+  const previewMode = owner && query.preview === 'student';
   if (course.status !== 'published' && !owner) notFound();
   const enrolled =
     !!user &&
@@ -77,7 +80,6 @@ export default async function Learn({
     hasLessonVideo(id),
     one('SELECT lesson_id FROM lesson_quizzes WHERE lesson_id=?', id),
   ]);
-  const query = await searchParams;
   const videoSrc = storedVideo ? `/learn/${id}/video` : lesson.video_url;
   const body = lesson.body
     .split('\n\n')
@@ -96,7 +98,22 @@ export default async function Learn({
           </span>
           <h1 className="detail-title">{lesson.title}</h1>
           <p className="lesson-teacher">Оқытушы: {course.teacher}</p>
-          {owner && (
+          {previewMode && (
+            <div className="lesson-access-note">
+              <strong>Оқушы көрінісі</strong>
+              <p>
+                Материалдарды студентке арналған тәртіппен көріп отырсыз. Бұл режимде жауаптар мен
+                оқу барысы сақталмайды.
+              </p>
+              <Link
+                className="text-link"
+                href={`/teacher/courses/${course.id}?lesson=${id}#lesson-editor`}
+              >
+                Редакторға оралу →
+              </Link>
+            </div>
+          )}
+          {owner && !previewMode && (
             <Link
               className="text-link lesson-edit-link"
               href={`/teacher/courses/${course.id}?lesson=${id}#lesson-editor`}
@@ -157,7 +174,8 @@ export default async function Learn({
                 <LessonQuiz
                   lessonId={id}
                   userId={user?.id}
-                  enrolled={enrolled}
+                  enrolled={enrolled && !previewMode}
+                  preview={previewMode}
                   error={query.quizError}
                   saved={query.quizSaved}
                 />
@@ -165,7 +183,9 @@ export default async function Learn({
             }
           />
           <div className="lesson-actions">
-            {enrolled ? (
+            {previewMode ? (
+              <p className="help-text">Оқушы көрінісі · оқу барысын белгілеу өшірілген.</p>
+            ) : enrolled ? (
               done ? (
                 <span className="complete-label">
                   <CheckCircle2 size={19} />
@@ -184,12 +204,18 @@ export default async function Learn({
               </Link>
             )}
             {next && (enrolled || owner || !!next.is_preview) && (
-              <Link href={`/learn/${next.id}`} className="button outline">
+              <Link
+                href={`/learn/${next.id}${previewMode ? '?preview=student' : ''}`}
+                className="button outline"
+              >
                 Келесі сабақ <ArrowRight size={16} />
               </Link>
             )}
             {previous && (enrolled || owner || !!previous.is_preview) && (
-              <Link href={`/learn/${previous.id}`} className="button outline">
+              <Link
+                href={`/learn/${previous.id}${previewMode ? '?preview=student' : ''}`}
+                className="button outline"
+              >
                 <ArrowLeft size={16} />
                 Алдыңғы сабақ
               </Link>
@@ -208,7 +234,7 @@ export default async function Learn({
                 <Link
                   key={item.id}
                   className={`lesson-nav ${item.id === id ? 'selected' : ''}`}
-                  href={`/learn/${item.id}`}
+                  href={`/learn/${item.id}${previewMode ? '?preview=student' : ''}`}
                 >
                   <span>{i + 1}</span>
                   {item.title}

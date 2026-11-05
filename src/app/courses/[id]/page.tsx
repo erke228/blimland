@@ -153,7 +153,10 @@ export default async function CoursePage({
             ) : course.status !== 'published' ? (
               <p className="help-text">Курс жарияланғаннан кейін жазылуға болады.</p>
             ) : !user ? (
-              <Link href="/login" className="button primary full-width">
+              <Link
+                href={`/login?next=${encodeURIComponent(`/courses/${course.id}`)}`}
+                className="button primary full-width"
+              >
                 Кіру және жазылу →
               </Link>
             ) : (

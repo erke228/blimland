@@ -348,15 +348,28 @@ test('Only owner can change site settings or revoke another user’s sessions', 
     0,
   );
 });
-test('Login return paths allow only local invitation URLs', () => {
+test('Login return paths allow only explicit local invitation and learning routes', () => {
   const path = `/join/${'a'.repeat(48)}`;
   assert.equal(safeReturnPath(path), path);
+  for (const learning of [
+    '/courses/natural-language-processing',
+    '/learn/abc-123#knowledge-check',
+    '/learn/abc#python-practice',
+  ])
+    assert.equal(safeReturnPath(learning), learning);
   for (const input of [
     '//evil.example',
     'https://evil.example',
     '/\\evil.example',
     '/admin',
     '/join/a?next=https://evil.example',
+    '/courses/../admin',
+    '/courses/%2f%2fevil.example',
+    '/learn/a?next=https://evil.example',
+    '/learn/a#unexpected',
+    '/learn/a\\evil',
+    '/learn/a\n',
+    '/courses/a/extra',
   ])
     assert.equal(safeReturnPath(input), '');
 });

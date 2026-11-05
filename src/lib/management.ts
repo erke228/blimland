@@ -62,9 +62,14 @@ export async function recordAudit(actorId: string, action: string, target: strin
   );
 }
 export function safeReturnPath(input: string | undefined) {
-  if (!input || !/^\/(?!\/)/.test(input) || /[\\\r\n]/.test(input) || !input.startsWith('/join/'))
-    return '';
-  return /^\/join\/[a-f0-9]{48}$/.test(input) ? input : '';
+  if (!input || input.length > 240) return '';
+  if (/^\/join\/[a-f0-9]{48}$/.test(input)) return input;
+  // Explicit learning routes only: no query strings, encoding, dot segments or external URLs.
+  return /^\/(?:courses|learn)\/[a-z0-9]+(?:-[a-z0-9]+)*(?:#(?:knowledge-check|python-practice|lesson-content))?$/.test(
+    input,
+  )
+    ? input
+    : '';
 }
 const groupSelect = `SELECT g.*, u.name teacher,
   (SELECT COUNT(*) FROM group_members m WHERE m.group_id = g.id) member_count,
