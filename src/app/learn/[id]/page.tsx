@@ -17,6 +17,7 @@ import { PythonPractice } from '@/components/python-practice';
 import { lessonPractice } from '@/lib/practices';
 import { hasLessonVideo } from '@/lib/lesson-videos';
 import { LessonStages } from '@/components/lesson-stages';
+import { LectureText } from '@/components/lecture-text';
 export default async function Learn({
   params,
   searchParams,
@@ -70,10 +71,7 @@ export default async function Learn({
     one('SELECT lesson_id FROM lesson_quizzes WHERE lesson_id=?', id),
   ]);
   const videoSrc = storedVideo ? `/learn/${id}/video` : lesson.video_url;
-  const body = lesson.body
-    .split('\n\n')
-    .filter(Boolean)
-    .map((paragraph, i) => <p key={i}>{paragraph}</p>);
+  const body = <LectureText text={lesson.body} />;
   return (
     <>
       <Link className="back-link" href={`/courses/${course.id}`}>

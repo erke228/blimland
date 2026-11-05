@@ -338,7 +338,7 @@ try {
       courseId: id,
       sectionId,
       title: 'Жабық сабақ',
-      body: 'PRIVATE-LESSON-CONTENT',
+      body: 'PRIVATE-LESSON-CONTENT\n\n# HTTP section\n\n```python\nprint(5)\n```',
       videoUrl: '',
       minutes: '12',
     },
@@ -555,6 +555,11 @@ try {
   assert.equal((await guest.get(coverPath)).status, 200);
   assert.equal((await guest.get(lectureCoverPath)).status, 200);
   assert((await guest.html(`/learn/${lessonId}`)).includes('PRIVATE-LESSON-CONTENT'));
+  const structuredLecture = await guest.html(`/learn/${lessonId}`);
+  assert(
+    structuredLecture.includes('<h2>HTTP section</h2>') &&
+      structuredLecture.includes('<pre><code>print(5)'),
+  );
   assert((await student.html(`/learn/${lessonId}`)).includes('PRIVATE-LESSON-CONTENT'));
   const enrollmentForm = await student.html(`/courses/${id}`);
   await student.submit(`/courses/${id}`, { courseId: id }, 'name="courseId"', enrollmentForm);

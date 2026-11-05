@@ -24,6 +24,7 @@ import { DocumentFileInput } from '@/components/document-file-input';
 import { CourseControls } from '@/components/course-controls';
 import { courseInTrash } from '@/lib/course-lifecycle';
 import { FilePicker } from '@/components/file-picker';
+import { LectureTextEditor } from '@/components/lecture-text-editor';
 export default async function CourseEditor({
   params,
   searchParams,
@@ -442,19 +443,7 @@ export default async function CourseEditor({
                       />
                       <small>Дәрісті аяқтаған студент нені түсінеді немесе орындай алады?</small>
                     </label>
-                    <label>
-                      Дәріс мәтіні
-                      <textarea
-                        name="body"
-                        rows={12}
-                        maxLength={30000}
-                        defaultValue={editing?.body}
-                        placeholder="Түсіндірме, мысалдар, әдебиеттер. Құжатты төменде бөлек жүктей аласыз."
-                      />
-                      <small>
-                        Әр абзацты бос жолмен бөліңіз. Құжатпен оқытсаңыз, мәтін міндетті емес.
-                      </small>
-                    </label>
+                    <LectureTextEditor initial={editing?.body || ''} />
                     <label>
                       Бейнефайлға HTTPS сілтеме
                       <input
