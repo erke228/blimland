@@ -1,0 +1,2 @@
+export const MAX_VIDEO_UPLOAD_BYTES = 4 * 1024 * 1024;
+export const MAX_DIRECT_VIDEO_BYTES = 80 * 1024 * 1024;

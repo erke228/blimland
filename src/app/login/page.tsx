@@ -1,9 +1,8 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { currentUser } from '@/lib/auth';
-import { login } from '../actions';
 import { Notice } from '@/components/ui';
-import { SubmitButton } from '@/components/submit-button';
+import { LoginForm } from '@/components/login-form';
 import { safeReturnPath } from '@/lib/management';
 export default async function Login({
   searchParams,
@@ -34,31 +33,7 @@ export default async function Login({
         <h2>Қош келдіңіз!</h2>
         <p className="muted">Оқуды жалғастыру үшін аккаунтыңызға кіріңіз.</p>
         <Notice error={error} success={query.success} />
-        <form action={login} className="form-stack">
-          <input type="hidden" name="next" value={next} />
-          <label>
-            Email
-            <input
-              type="email"
-              name="email"
-              required
-              maxLength={254}
-              autoComplete="email"
-              placeholder="name@example.kz"
-            />
-          </label>
-          <label>
-            Құпиясөз
-            <input
-              type="password"
-              name="password"
-              required
-              maxLength={128}
-              autoComplete="current-password"
-            />
-          </label>
-          <SubmitButton>Кіру →</SubmitButton>
-        </form>
+        <LoginForm next={next} />
         <p className="auth-switch">
           Аккаунтыңыз жоқ па?{' '}
           <Link href={next ? `/register?next=${encodeURIComponent(next)}` : '/register'}>

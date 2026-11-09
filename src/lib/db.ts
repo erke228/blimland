@@ -148,6 +148,8 @@ export async function migrate() {
     '008_remove_course_pricing',
     '009_learning_tools',
     '010_video_cleanup',
+    '011_direct_video_uploads',
+    '012_direct_video_final_objects',
   ]) {
     if (!(await one('SELECT name FROM migrations WHERE name=?', name)))
       await transaction(async () => {

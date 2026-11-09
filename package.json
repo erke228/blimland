@@ -14,6 +14,7 @@
     "start": "next start --hostname 127.0.0.1",
     "typecheck": "tsc --noEmit",
     "db:migrate": "tsx scripts/migrate.ts",
+    "video:staging:clean:local": "tsx scripts/clean-video-staging.ts",
     "db:migrate:postgres": "tsx scripts/migrate-postgres.ts",
     "db:import:sqlite": "tsx scripts/import-sqlite.ts",
     "db:seed": "tsx scripts/seed.ts",
@@ -28,6 +29,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1158.0",
+    "@aws-sdk/s3-presigned-post": "3.1158.0",
     "@aws-sdk/s3-request-presigner": "^3.1158.0",
     "@fontsource/noto-sans": "5.3.0",
     "@neon/config": "^1.9.5",

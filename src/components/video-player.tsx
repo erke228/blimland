@@ -1,5 +1,6 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { sendVideoPosition } from '@/lib/video-position-request';
 export function VideoPlayer({
   src,
   progress,
@@ -11,6 +12,8 @@ export function VideoPlayer({
   const [error, setError] = useState(false);
   const [saveError, setSaveError] = useState(false);
   const ready = useRef(false);
+  const retryPosition = useRef<number | null>(null);
+  const startingPosition = useRef<number | null | undefined>(undefined);
   const lastAttempt = useRef(0);
   const saved = useRef(progress?.initialPosition ?? 0);
   const pending = useRef<number | null>(null);
@@ -20,12 +23,11 @@ export function VideoPlayer({
   const initialize = useCallback(
     (element: HTMLVideoElement) => {
       if (ready.current) return;
-      if (
-        initialPosition > 0 &&
-        Number.isFinite(element.duration) &&
-        initialPosition < element.duration - 1
-      )
-        element.currentTime = initialPosition;
+      const position = retryPosition.current ?? initialPosition;
+      if (position > 0 && Number.isFinite(element.duration) && position < element.duration - 1)
+        element.currentTime = position;
+      if (startingPosition.current === undefined) startingPosition.current = element.currentTime;
+      retryPosition.current = null;
       ready.current = true;
     },
     [initialPosition],
@@ -33,6 +35,11 @@ export function VideoPlayer({
   const save = useCallback(
     async (position: number, force = false) => {
       if (!lessonId || !ready.current || !Number.isFinite(position)) return;
+      // Merely loading a player must not replace a saved position the player couldn't restore.
+      if (typeof startingPosition.current === 'number') {
+        if (Math.abs(startingPosition.current - position) < 0.5) return;
+        startingPosition.current = null;
+      }
       if (!force && Date.now() - lastAttempt.current < 15000) return;
       if (!saving.current && Math.abs(saved.current - position) < 0.5) return;
       lastAttempt.current = Date.now();
@@ -45,16 +52,8 @@ export function VideoPlayer({
           const next = pending.current;
           pending.current = null;
           if (Math.abs(saved.current - next) < 0.5) continue;
-          const form = new FormData();
-          form.set('position', String(next));
           try {
-            const response = await fetch(`/learn/${lessonId}/video/progress`, {
-              method: 'POST',
-              body: form,
-              credentials: 'same-origin',
-              keepalive: true,
-            });
-            if (!response.ok) throw new Error('Position was not saved');
+            await sendVideoPosition(lessonId, next);
             saved.current = next;
             setSaveError(false);
           } catch {
@@ -71,6 +70,7 @@ export function VideoPlayer({
     const element = video.current;
     // Metadata may arrive before React hydrates the server-rendered video.
     if (element && element.readyState >= 1) initialize(element);
+    if (element?.error) setError(true);
     const flush = () => {
       if (element) void save(element.currentTime, true);
     };
@@ -85,6 +85,15 @@ export function VideoPlayer({
       document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [save, initialize]);
+  function retryPlayback() {
+    const element = video.current;
+    if (!element) return;
+    if (ready.current) retryPosition.current = element.currentTime;
+    ready.current = false;
+    setError(false);
+    element.load();
+    element.focus();
+  }
   return (
     <div className="video-container">
       <video
@@ -137,8 +146,11 @@ export function VideoPlayer({
         </div>
       )}
       {error && (
-        <div className="notice error">
-          Бейне ашылмады. Оқытушыға хабарлаңыз. Сілтеме тікелей бейнефайлға бағытталуы тиіс.
+        <div className="notice error" role="status">
+          <p>Бейне ашылмады. Байланысты тексеріңіз. Мәселе қайталанса, оқытушыға хабарлаңыз.</p>
+          <button type="button" className="button outline" onClick={retryPlayback}>
+            Бейнені қайта жүктеу
+          </button>
         </div>
       )}
     </div>

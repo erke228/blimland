@@ -5,6 +5,7 @@ import { notFound, redirect } from 'next/navigation';
 import { requireUser } from '@/lib/auth';
 import { basicProfile } from '@/lib/student-community';
 import { roleLabel } from '@/components/person-card';
+import { UserAvatar } from '@/components/user-avatar';
 export const metadata: Metadata = {
   title: 'Қысқаша профиль',
   robots: { index: false, follow: false },
@@ -28,9 +29,7 @@ export default async function PersonProfile({
         Профильге оралу
       </Link>
       <article className="panel basic-profile">
-        <span className="profile-avatar" aria-hidden="true">
-          {person.name.trim().slice(0, 1)}
-        </span>
+        <UserAvatar id={person.id} name={person.name} className="profile-avatar" />
         <span className="people-label">ҚЫСҚАША ПРОФИЛЬ</span>
         <h1>{person.name}</h1>
         <span className="basic-role">{roleLabel[person.role]}</span>

@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { UserAvatar } from '@/components/user-avatar';
 import { notFound } from 'next/navigation';
 import { ArrowLeft, BookOpen, Clock3, CheckCircle2, LockKeyhole, PlayCircle } from 'lucide-react';
 import { currentUser } from '@/lib/auth';
@@ -17,6 +18,7 @@ export default async function CoursePage({
   }>;
   searchParams: Promise<{
     error?: string;
+    catalog?: string;
   }>;
 }) {
   const { id } = await params;
@@ -48,13 +50,31 @@ export default async function CoursePage({
       : [],
   );
   const first = lessons.find((lesson) => !completed.has(lesson.id)) || lessons[0];
+  const query = await searchParams;
+  const catalog = new URLSearchParams(typeof query.catalog === 'string' ? query.catalog : '');
+  const returnFilters = new URLSearchParams();
+  for (const key of [
+    'q',
+    'category',
+    'teacher',
+    'level',
+    'format',
+    'access',
+    'sort',
+    'layout',
+    'page',
+  ]) {
+    const value = catalog.get(key);
+    if (value) returnFilters.set(key, value.slice(0, 200));
+  }
+  const catalogHref = returnFilters.size ? `/courses?${returnFilters}` : '/courses';
   return (
     <>
-      <Link className="back-link" href="/courses">
+      <Link className="back-link" href={catalogHref}>
         <ArrowLeft size={16} />
         Курстар каталогы
       </Link>
-      <Notice {...await searchParams} />
+      <Notice {...query} />
       {course.status !== 'published' && (
         <div className="notice">Бұл — жарияланбаған курстың алдын ала көрінісі.</div>
       )}
@@ -68,7 +88,7 @@ export default async function CoursePage({
             <ExpandableDescription text={course.description} />
             <div className="detail-meta">
               <span className="teacher-line">
-                <span className="tiny-avatar">{course.teacher[0]}</span>
+                <UserAvatar id={course.owner_id} name={course.teacher} />
                 {course.teacher}
               </span>
               <span>
@@ -116,6 +136,14 @@ export default async function CoursePage({
                                 {lesson.duration_minutes} мин
                                 {course.status === 'published' ? ' · Ашық сабақ' : ''}
                               </span>
+                              {canOpen &&
+                                !!(lesson.has_video || lesson.has_pdf || lesson.has_docx) && (
+                                  <div className="resource-tags program-resources">
+                                    {!!lesson.has_video && <span>Бейне</span>}
+                                    {!!lesson.has_pdf && <span>PDF</span>}
+                                    {!!lesson.has_docx && <span>Word</span>}
+                                  </div>
+                                )}
                             </div>
                             {canOpen ? <PlayCircle size={20} /> : <LockKeyhole size={18} />}
                           </>

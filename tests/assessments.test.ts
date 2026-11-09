@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
-import { migrate, one, run } from '../src/lib/db';
+import { randomUUID, createHash } from 'node:crypto';
+import { readdir, mkdir, rmdir, writeFile, readFile } from 'node:fs/promises';
+import { all, migrate, one, run } from '../src/lib/db';
 import {
   publicQuiz,
   submitQuiz,
@@ -13,9 +14,21 @@ import {
 import { practiceDownload, lessonPractice } from '../src/lib/practices';
 import { createCourseWithBanner } from '../src/lib/course-creation';
 import { writeLesson } from '../src/lib/course-editor';
-import { saveLessonVideo, readableVideo } from '../src/lib/lesson-videos';
-import { changeCourseVisibility, purgeCourse } from '../src/lib/course-lifecycle';
+import {
+  saveLessonVideo,
+  readableVideo,
+  discardUnattachedVideo,
+  videoPath,
+  replaceLessonVideo,
+} from '../src/lib/lesson-videos';
+import {
+  changeCourseVisibility,
+  purgeCourse,
+  flushFileDeletions,
+} from '../src/lib/course-lifecycle';
+import { auditPresentation } from '../src/lib/audit-presentation';
 import { loadEnvironment } from '../scripts/postgres-environment';
+import { mp4Fixture } from './video-fixtures';
 const postgres = process.env.BILIMHUB_POSTGRES_LEARNING_TEST === '1';
 if (postgres) {
   if (!process.env.APP_ENV_FILE) throw Error('Explicit test branch configuration required.');
@@ -28,6 +41,7 @@ if (postgres) {
   await migrate();
 }
 process.env.STORAGE_DRIVER = 'local';
+process.env.VIDEO_COURSE_QUOTA_BYTES = '0';
 process.env.VIDEO_DIR = `.test-data/videos-${randomUUID()}`;
 async function user(role: string) {
   const id = randomUUID();
@@ -188,7 +202,13 @@ test('three daily attempts; retries reuse an existing attempt and do not consume
 });
 test('private videos reject overlong clips and enforce lecture access', async () => {
   await run("UPDATE courses SET status='draft' WHERE id=?", course);
-  const bytes = Buffer.from('0000ftypmp42test-only-video');
+  const bytes = mp4Fixture();
+  await assert.rejects(() =>
+    saveLessonVideo(teacher, lesson, mp4Fixture(120000), 53000, 'forged-duration'),
+  );
+  await assert.rejects(() =>
+    saveLessonVideo(teacher, lesson, Buffer.from('0000ftypmp42fake'), 53000, 'fake-file'),
+  );
   await assert.rejects(() => saveLessonVideo(teacher, lesson, bytes, 90001, 'source'));
   await saveLessonVideo(teacher, lesson, bytes, 53000, 'source');
   assert.equal(await readableVideo(lesson, outsider), undefined);
@@ -202,6 +222,176 @@ test('private videos reject overlong clips and enforce lecture access', async ()
   assert.equal(await readableVideo(lesson), undefined);
   assert.equal(await practiceDownload(lesson), undefined);
   await run("UPDATE courses SET status='published' WHERE id=?", course);
+});
+test('explicit video replacement rejects stale edits and preserves progress and quiz history', async () => {
+  const original = mp4Fixture(),
+    next = mp4Fixture(60000);
+  const hash = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
+  await assert.rejects(replaceLessonVideo(teacher, lesson, next, hash(original)), {
+    code: 'readonly',
+  });
+  await run("UPDATE courses SET status='draft' WHERE id=?", course);
+  await assert.rejects(replaceLessonVideo(student, lesson, next, hash(original)), {
+    code: 'forbidden',
+  });
+  await assert.rejects(replaceLessonVideo(foreign, lesson, next, hash(original)), {
+    code: 'forbidden',
+  });
+  await assert.rejects(replaceLessonVideo(teacher, lesson, next, '0'.repeat(64)), {
+    code: 'videostale',
+  });
+  await run(
+    'INSERT INTO lesson_progress(user_id,lesson_id,completed_at,video_position) VALUES(?,?,?,?)',
+    student,
+    lesson,
+    12345,
+    12,
+  );
+  const progress = await one(
+    'SELECT * FROM lesson_progress WHERE user_id=? AND lesson_id=?',
+    student,
+    lesson,
+  );
+  const attempts = await all('SELECT * FROM quiz_attempts WHERE lesson_id=? ORDER BY id', lesson);
+  process.env.VIDEO_COURSE_QUOTA_BYTES = String(original.length);
+  try {
+    await assert.rejects(
+      replaceLessonVideo(teacher, lesson, mp4Fixture(60000, 1), hash(original)),
+      { code: 'videoquota' },
+    );
+    assert((await readableVideo(lesson, teacher))!.buffer!.equals(original));
+    assert.equal(await replaceLessonVideo(teacher, lesson, next, hash(original)), true);
+    const events = (await one<{ n: number }>(
+      "SELECT COUNT(*) n FROM audit_log WHERE target_id=? AND action='lesson.video_replaced'",
+      lesson,
+    ))!.n;
+    assert.equal(
+      await replaceLessonVideo(teacher, lesson, next, hash(original)),
+      false,
+      'Retry after lost response is idempotent',
+    );
+    assert.equal(
+      (await one<{ n: number }>(
+        "SELECT COUNT(*) n FROM audit_log WHERE target_id=? AND action='lesson.video_replaced'",
+        lesson,
+      ))!.n,
+      events,
+    );
+    const competing = await Promise.allSettled([
+      replaceLessonVideo(teacher, lesson, mp4Fixture(40000), hash(next)),
+      replaceLessonVideo(teacher, lesson, mp4Fixture(50000), hash(next)),
+    ]);
+    assert.equal(competing.filter((r) => r.status === 'fulfilled').length, 1);
+    assert.equal(
+      (competing.find((r) => r.status === 'rejected') as PromiseRejectedResult).reason.code,
+      'videostale',
+    );
+    const current = (await one<{ sha256: string }>(
+      'SELECT sha256 FROM lesson_videos WHERE lesson_id=?',
+      lesson,
+    ))!.sha256;
+    await replaceLessonVideo(teacher, lesson, original, current);
+    assert.deepEqual(
+      await one('SELECT * FROM lesson_progress WHERE user_id=? AND lesson_id=?', student, lesson),
+      progress,
+    );
+    assert.deepEqual(
+      await all('SELECT * FROM quiz_attempts WHERE lesson_id=? ORDER BY id', lesson),
+      attempts,
+    );
+    await flushFileDeletions();
+    assert.equal((await readdir(process.env.VIDEO_DIR!)).length, 1);
+    assert((await readableVideo(lesson, teacher))!.buffer!.equals(original));
+    assert.equal(auditPresentation('lesson.video_replaced').kind, 'edit');
+    assert.equal(auditPresentation('lesson.video_replaced').permanent, false);
+  } finally {
+    process.env.VIDEO_COURSE_QUOTA_BYTES = '0';
+  }
+});
+test('configured course video quota resists concurrent uploads and counts removed sections', async () => {
+  const original = process.env.VIDEO_COURSE_QUOTA_BYTES;
+  const bytes = mp4Fixture();
+  await run("UPDATE courses SET status='draft' WHERE id=?", course);
+  const create = async (sectionId: string) =>
+    writeLesson(teacher, course, {
+      id: '',
+      sectionId,
+      title: 'Қосымша бейнесабақ',
+      body: 'Квота тексерісі.',
+      videoUrl: '',
+      minutes: 1,
+      preview: false,
+      summary: '',
+      objectives: '',
+    });
+  try {
+    process.env.VIDEO_COURSE_QUOTA_BYTES = String(bytes.length * 2);
+    const first = await create(section),
+      second = await create(section);
+    const results = await Promise.allSettled([
+      saveLessonVideo(teacher, first, bytes, 53000, 'quota-first'),
+      saveLessonVideo(teacher, second, bytes, 53000, 'quota-second'),
+    ]);
+    assert.equal(results.filter((r) => r.status === 'fulfilled').length, 1);
+    const failure = results.find((r) => r.status === 'rejected') as PromiseRejectedResult;
+    assert.equal(failure.reason.code, 'videoquota');
+    assert.equal(
+      (await readdir(process.env.VIDEO_DIR!)).length,
+      2,
+      'Failed concurrent staging file must be removed',
+    );
+    await assert.doesNotReject(saveLessonVideo(teacher, lesson, bytes, 53000, 'same-file-retry'));
+    const nextSection = randomUUID();
+    await run('INSERT INTO sections VALUES(?,?,?,?)', nextSection, course, 'Белсенді бөлім', 1);
+    const next = await create(nextSection);
+    await run('INSERT INTO section_trash VALUES(?,?)', section, Date.now());
+    await assert.rejects(saveLessonVideo(teacher, next, bytes, 53000, 'hidden-bypass'), {
+      code: 'videoquota',
+    });
+    process.env.VIDEO_COURSE_QUOTA_BYTES = 'invalid-setting';
+    await assert.rejects(
+      saveLessonVideo(teacher, next, bytes, 53000, 'bad-config'),
+      /nonnegative integer/,
+    );
+    assert.equal((await readdir(process.env.VIDEO_DIR!)).length, 2);
+  } finally {
+    if (original === undefined) delete process.env.VIDEO_COURSE_QUOTA_BYTES;
+    else process.env.VIDEO_COURSE_QUOTA_BYTES = original;
+  }
+});
+test('failed staging cleanup keeps a retry job and never deletes an attached video', async () => {
+  const attached = (await one<{ storage_key: string }>(
+    'SELECT storage_key FROM lesson_videos WHERE lesson_id=?',
+    lesson,
+  ))!.storage_key;
+  const original = await readFile(videoPath(attached));
+  await discardUnattachedVideo(attached);
+  assert((await readFile(videoPath(attached))).equals(original));
+  assert.equal(
+    await one('SELECT storage_key FROM video_deletions WHERE storage_key=?', attached),
+    undefined,
+  );
+  await run('INSERT INTO video_deletions VALUES(?,?)', attached, Date.now());
+  await flushFileDeletions();
+  assert(
+    (await readFile(videoPath(attached))).equals(original),
+    'A stale cleanup job cannot delete an attached video',
+  );
+  const staged = `${randomUUID()}.mp4`,
+    path = videoPath(staged);
+  // An empty directory at the isolated path makes unlink fail on Windows and Linux.
+  await mkdir(path);
+  await discardUnattachedVideo(staged);
+  assert(await one('SELECT storage_key FROM video_deletions WHERE storage_key=?', staged));
+  await rmdir(path);
+  await writeFile(path, Buffer.from('isolated staging fixture'));
+  await flushFileDeletions();
+  assert.equal(
+    await one('SELECT storage_key FROM video_deletions WHERE storage_key=?', staged),
+    undefined,
+  );
+  await assert.rejects(readFile(path), { code: 'ENOENT' });
+  assert((await readFile(videoPath(attached))).equals(original));
 });
 test('permanent course deletion removes video metadata and drains durable cleanup queue', async () => {
   const admin =

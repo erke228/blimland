@@ -52,18 +52,23 @@ async function audit(actor: string, action: string, target: string) {
     Date.now(),
   );
 }
-export async function register(form: FormData) {
+type RegisterState = { name: string; email: string; error?: 'registration' | 'rate' | 'email' };
+
+export async function register(_previous: RegisterState, form: FormData): Promise<RegisterState> {
   if (!(await settings()).registration_open) authFail('/register', 'registrationclosed', form);
+  const enteredName = value(form, 'name');
+  const enteredEmail = value(form, 'email');
+  const fields = { name: enteredName.slice(0, 80), email: enteredEmail.slice(0, 254) };
   const parsed = credentials.extend({ name: z.string().min(2).max(80) }).safeParse({
-    name: value(form, 'name'),
-    email: value(form, 'email').toLowerCase(),
+    name: enteredName,
+    email: enteredEmail.toLowerCase(),
     password: String(form.get('password') ?? ''),
   });
-  if (!parsed.success) authFail('/register', 'registration', form);
-  if (!(await rateLimit('register:global', 60, 3600000))) authFail('/register', 'rate', form);
+  if (!parsed.success) return { ...fields, error: 'registration' };
+  if (!(await rateLimit('register:global', 60, 3600000))) return { ...fields, error: 'rate' };
   const { name, email, password } = parsed.data;
   if (await one('SELECT id FROM users WHERE email = ?', email))
-    authFail('/register', 'email', form);
+    return { ...fields, error: 'email' };
   const id = randomUUID();
   const passwordHash = hashPassword(password);
   await transaction(async () => {
@@ -80,8 +85,11 @@ export async function register(form: FormData) {
   await signIn(id);
   redirect(safeReturnPath(value(form, 'next')) || '/dashboard');
 }
-export async function login(form: FormData) {
-  const email = value(form, 'email').toLowerCase();
+type LoginState = { email: string; error?: 'credentials' | 'rate' };
+
+export async function login(_previous: LoginState, form: FormData): Promise<LoginState> {
+  const enteredEmail = value(form, 'email');
+  const email = enteredEmail.toLowerCase();
   const password = String(form.get('password') ?? '');
   if (
     email.length > 254 ||
@@ -89,7 +97,7 @@ export async function login(form: FormData) {
     !(await rateLimit('login:global', 400, 900000)) ||
     !(await rateLimit(`login:${tokenHash(email)}`, 20, 900000))
   )
-    authFail('/login', 'rate', form);
+    return { email: enteredEmail.slice(0, 254), error: 'rate' };
   const user = await one<{
     id: string;
     password_hash: string;
@@ -99,7 +107,7 @@ export async function login(form: FormData) {
   // Perform comparable work for unknown accounts without exposing account existence.
   const stored = user?.password_hash ?? `${'0'.repeat(32)}:${'0'.repeat(128)}`;
   if (!verifyPassword(password, stored) || !user || user.status !== 'active')
-    authFail('/login', 'credentials', form);
+    return { email: enteredEmail, error: 'credentials' };
   await run('UPDATE users SET last_active_at = ? WHERE id = ?', Date.now(), user.id);
   await signIn(user.id);
   redirect(

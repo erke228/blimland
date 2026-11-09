@@ -319,7 +319,9 @@ export async function assertCourseComplete(id: string) {
     throw new ManagementError('emptycourse');
   const empty = await one(
     `SELECT l.id FROM lessons l JOIN sections s ON s.id=l.section_id WHERE s.course_id=?
-    AND NOT EXISTS(SELECT 1 FROM section_trash t WHERE t.section_id=s.id) AND trim(l.body)='' AND l.video_url='' AND NOT EXISTS(SELECT 1 FROM lesson_materials m WHERE m.lesson_id=l.id AND m.removed_at IS NULL)`,
+    AND NOT EXISTS(SELECT 1 FROM section_trash t WHERE t.section_id=s.id) AND trim(l.body)='' AND l.video_url=''
+    AND NOT EXISTS(SELECT 1 FROM lesson_videos v WHERE v.lesson_id=l.id)
+    AND NOT EXISTS(SELECT 1 FROM lesson_materials m WHERE m.lesson_id=l.id AND m.removed_at IS NULL)`,
     id,
   );
   if (empty) throw new ManagementError('emptylesson');

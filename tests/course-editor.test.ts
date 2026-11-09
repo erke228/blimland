@@ -186,6 +186,30 @@ test('Empty drafts support document-first creation but cannot be submitted; inva
   await run("UPDATE courses SET status='published' WHERE id=?", id);
   await assert.rejects(async () => await lesson(id), code('readonly'));
 });
+test('Stored video alone satisfies publication readiness only for its own active lecture', async () => {
+  const id = await course();
+  const first = await lesson(id, { body: '   ' });
+  await assert.rejects(assertCourseComplete(id), code('emptylesson'));
+  await run(
+    'INSERT INTO lesson_videos VALUES(?,?,?,?,?,?,?,?)',
+    first,
+    `${randomUUID()}.mp4`,
+    60000,
+    1024,
+    'isolated-metadata',
+    'fixture',
+    teacher,
+    Date.now(),
+  );
+  await assert.doesNotReject(assertCourseComplete(id));
+  // A video on another lecture must not make an empty lecture publishable.
+  const second = await lesson(id, { body: '' });
+  await assert.rejects(assertCourseComplete(id), code('emptylesson'));
+  await lesson(id, { id: second, body: 'Екінші дәрістің толық мәтіні.' });
+  await assert.doesNotReject(assertCourseComplete(id));
+  await run('DELETE FROM lesson_videos WHERE lesson_id=?', first);
+  await assert.rejects(assertCourseComplete(id), code('emptylesson'));
+});
 test('Covers are decoded and re-encoded, private for drafts, public on publication, and replaceable with a validated preset', async () => {
   const id = await course();
   const bytes = await sharp({

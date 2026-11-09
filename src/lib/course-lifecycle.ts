@@ -57,6 +57,10 @@ export async function flushFileDeletions() {
     'SELECT storage_key FROM video_deletions ORDER BY created_at LIMIT 100',
   )) {
     try {
+      if (await one('SELECT lesson_id FROM lesson_videos WHERE storage_key=?', job.storage_key)) {
+        await run('DELETE FROM video_deletions WHERE storage_key=?', job.storage_key);
+        continue;
+      }
       await deleteStored(`videos/${job.storage_key}`, videoPath(job.storage_key));
       await run('DELETE FROM video_deletions WHERE storage_key=?', job.storage_key);
     } catch {

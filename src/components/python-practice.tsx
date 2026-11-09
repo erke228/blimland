@@ -1,33 +1,63 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import type { Practice } from '@/lib/practices';
+
+function syncOutputTheme(frame: HTMLIFrameElement | null) {
+  frame?.contentWindow?.postMessage(
+    {
+      type: 'lab-theme',
+      theme: document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light',
+    },
+    '*',
+  );
+}
+
 export function PythonPractice({ practice, lessonId }: { practice: Practice; lessonId: string }) {
   const [code, setCode] = useState(practice.starter_code);
   const [active, setActive] = useState(false);
   const [running, setRunning] = useState(false);
   const frame = useRef<HTMLIFrameElement>(null);
-  const request = useRef('');
+  const ready = useRef(false);
+  const request = useRef<{ requestId: string; code: string } | null>(null);
+  useEffect(() => {
+    if (!active) return;
+    const observer = new MutationObserver(() => syncOutputTheme(frame.current));
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme'],
+    });
+    return () => observer.disconnect();
+  }, [active]);
   useEffect(() => {
     const handler = (event: MessageEvent) => {
       if (
         event.source === frame.current?.contentWindow &&
         event.data?.type === 'lab-done' &&
-        event.data.requestId === request.current
-      )
+        request.current &&
+        event.data.requestId === request.current.requestId
+      ) {
+        request.current = null;
         setRunning(false);
+      }
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
   }, []);
+  function sendRequest(target: HTMLIFrameElement | null) {
+    if (request.current)
+      target?.contentWindow?.postMessage({ type: 'lab-run', ...request.current }, '*');
+  }
   function run() {
-    request.current = crypto.randomUUID();
+    request.current = { requestId: crypto.randomUUID(), code };
     setRunning(true);
-    if (frame.current)
-      frame.current.contentWindow?.postMessage(
-        { type: 'lab-run', code, requestId: request.current },
-        '*',
-      );
+    if (ready.current) sendRequest(frame.current);
     else setActive(true);
+  }
+  function stop() {
+    request.current = null;
+    if (ready.current) frame.current?.contentWindow?.postMessage({ type: 'lab-stop' }, '*');
+    else setActive(false);
+    setRunning(false);
   }
   return (
     <section className="panel python-practice" id="python-practice">
@@ -57,15 +87,7 @@ export function PythonPractice({ practice, lessonId }: { practice: Practice; les
         >
           ▶ Іске қосу
         </button>
-        <button
-          className="button outline"
-          type="button"
-          disabled={!running}
-          onClick={() => {
-            frame.current?.contentWindow?.postMessage({ type: 'lab-stop' }, '*');
-            setRunning(false);
-          }}
-        >
+        <button className="button outline" type="button" disabled={!running} onClick={stop}>
           Тоқтату
         </button>
         <button
@@ -85,12 +107,12 @@ export function PythonPractice({ practice, lessonId }: { practice: Practice; les
           src="/python-lab.html"
           sandbox="allow-scripts"
           title="Python орындалу нәтижесі"
-          onLoad={() =>
-            frame.current?.contentWindow?.postMessage(
-              { type: 'lab-run', code, requestId: request.current },
-              '*',
-            )
-          }
+          onLoad={(event) => {
+            if (frame.current !== event.currentTarget) return;
+            ready.current = true;
+            syncOutputTheme(event.currentTarget);
+            sendRequest(event.currentTarget);
+          }}
         />
       )}
       {practice.expected_output && (

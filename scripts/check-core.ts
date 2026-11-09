@@ -8,6 +8,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { migrate, one, run } from '../src/lib/db';
 import { hashPassword } from '../src/lib/security';
 import { pdfFixture, docxFixture } from '../tests/document-fixtures';
+import { mp4Fixture } from '../tests/video-fixtures';
 import sharp from 'sharp';
 import { PDFDocument } from 'pdf-lib';
 import { loadEnvironment } from './postgres-environment';
@@ -25,6 +26,9 @@ if (postgresTest) {
 mkdirSync('.test-data', { recursive: true });
 process.env.DATABASE_PATH = resolve('.test-data', `${randomUUID()}.sqlite`);
 process.env.UPLOAD_DIR = resolve('.test-data', `http-materials-${randomUUID()}`);
+process.env.VIDEO_DIR = resolve('.test-data', `http-videos-${randomUUID()}`);
+process.env.VIDEO_COURSE_QUOTA_BYTES = '0';
+process.env.DIRECT_VIDEO_UPLOAD_ENABLED = 'false';
 if (!postgresTest) {
   process.env.DATABASE_DRIVER = 'sqlite';
   process.env.STORAGE_DRIVER = 'local';
@@ -85,18 +89,29 @@ class Browser {
   async html(path: string) {
     return (await this.get(path)).text();
   }
-  async submit(path: string, data: Record<string, string>, match?: string, explicitForm?: string) {
+  async submitForm(
+    path: string,
+    data: Record<string, string>,
+    match?: string,
+    explicitForm?: string,
+  ) {
     const html = explicitForm || (await this.html(path));
     const forms = html.match(/<form\b[\s\S]*?<\/form>/g) || [];
     const form = forms.find((item) =>
-      match ? item.includes(match) : !!item.match(/name="\$ACTION_ID_/),
+      match ? item.includes(match) : /name="\$ACTION_(?:ID|REF)_/.test(item),
     );
     assert(form, `Missing form ${match || ''} at ${path}`);
-    const action = form.match(/name="(\$ACTION_ID_[^"]+)"/);
+    const actions = [...form.matchAll(/name="(\$ACTION_[^"]+)"(?: value="([^"]*)")?/g)];
     const nativeAction = form.match(/action="(\/api\/(?:lessons|courses))"/);
-    assert(action || nativeAction, 'Missing form action');
+    assert(actions.length || nativeAction, 'Missing form action');
     const body = new FormData();
-    if (action) body.set(action[1], '');
+    const entities: Record<string, string> = { amp: '&', quot: '"', lt: '<', gt: '>', '#x27': "'" };
+    for (const [, name, value = ''] of actions) {
+      body.set(
+        name,
+        value.replace(/&(amp|quot|lt|gt|#x27);/g, (_, entity) => entities[entity]),
+      );
+    }
     for (const [key, value] of Object.entries(data)) body.set(key, value);
     const response = await fetch(`${origin}${nativeAction ? nativeAction[1] : path}`, {
       method: 'POST',
@@ -122,6 +137,10 @@ class Browser {
       else jar.set(key, value);
     }
     this.cookie = [...jar].map(([key, value]) => `${key}=${value}`).join('; ');
+    return response;
+  }
+  async submit(path: string, data: Record<string, string>, match?: string, explicitForm?: string) {
+    const response = await this.submitForm(path, data, match, explicitForm);
     assert.equal(response.status, 303, `Action failed at ${path}: ${response.status}`);
     return response.headers.get('location')!;
   }
@@ -501,12 +520,148 @@ try {
     'name="materialId"',
   );
   assert.equal((await teacher.get(filePath)).status, 404);
+  assert.match(
+    await teacher.html(`/courses/${id}`),
+    /class="resource-tags program-resources"><span>Word<\/span><\/div>/,
+  );
   await teacher.submit(
     `${editorPath}?tab=materials&lesson=${lessonId}`,
     { materialId: pdfId, restore: 'yes' },
     'value="yes"',
   );
   assert.equal((await teacher.get(filePath)).status, 200);
+  const uploadedVideo = mp4Fixture(53000);
+  const videoUploadEditor = await teacher.html(`${editorPath}?tab=lecture&lesson=${lessonId}`);
+  assert(videoUploadEditor.includes('Қысқа MP4 бейнесін қосу'));
+  const videoInput = videoUploadEditor
+    .match(/<input\b[^>]*>/g)
+    ?.find((input) => input.includes('accept="video/mp4,.mp4"'));
+  assert(
+    videoInput?.includes('name=""'),
+    'Video picker must not be submitted as a document with lecture text',
+  );
+  const videoPath = `/learn/${lessonId}/video`;
+  async function postVideo(
+    browser: Browser,
+    bytes: Buffer,
+    filename = 'lecture.mp4',
+    requestOrigin = origin,
+  ) {
+    const form = new FormData();
+    form.set('file', new Blob([new Uint8Array(bytes)], { type: 'video/mp4' }), filename);
+    form.set('durationMs', '1');
+    form.set('userId', 'forged-user');
+    return fetch(`${origin}${videoPath}`, {
+      method: 'POST',
+      body: form,
+      headers: { cookie: browser.cookie, origin: requestOrigin },
+    });
+  }
+  assert.equal((await postVideo(guest, uploadedVideo)).status, 401);
+  assert.equal((await postVideo(student, uploadedVideo)).status, 403);
+  assert.equal(
+    (await postVideo(teacher, uploadedVideo, 'lecture.mp4', 'https://outside.invalid')).status,
+    403,
+  );
+  assert.equal((await postVideo(teacher, Buffer.from('fake ftyp'))).status, 400);
+  assert.equal((await postVideo(teacher, uploadedVideo, 'lecture.docx')).status, 400);
+  assert.equal((await postVideo(teacher, mp4Fixture(120000))).status, 400);
+  assert.equal((await postVideo(teacher, Buffer.alloc(4 * 1024 * 1024 + 1))).status, 413);
+  const attached = await postVideo(teacher, uploadedVideo);
+  assert.equal(attached.status, 201);
+  assert.equal((await attached.json()).durationMs, 53000);
+  const firstVideoReceipt = await one<Record<string, unknown>>(
+    'SELECT * FROM lesson_videos WHERE lesson_id=?',
+    lessonId,
+  );
+  const firstVideoAudit = (await one<{ n: number }>(
+    "SELECT COUNT(*) n FROM audit_log WHERE target_id=? AND action='lesson.video_uploaded'",
+    lessonId,
+  ))!.n;
+  assert.equal(firstVideoAudit, 1);
+  const retriedVideo = await postVideo(teacher, uploadedVideo);
+  assert.equal(retriedVideo.status, 200);
+  assert.equal((await retriedVideo.json()).code, 'videouploaded');
+  assert.deepEqual(
+    await one('SELECT * FROM lesson_videos WHERE lesson_id=?', lessonId),
+    firstVideoReceipt,
+  );
+  assert.equal(
+    (await one<{ n: number }>(
+      "SELECT COUNT(*) n FROM audit_log WHERE target_id=? AND action='lesson.video_uploaded'",
+      lessonId,
+    ))!.n,
+    firstVideoAudit,
+  );
+  assert.equal((await postVideo(teacher, mp4Fixture(1000))).status, 409);
+  async function putVideo(
+    browser: Browser,
+    bytes: Buffer,
+    expected: string,
+    confirm = 'yes',
+    requestOrigin = origin,
+  ) {
+    const form = new FormData();
+    form.set('file', new Blob([new Uint8Array(bytes)], { type: 'video/mp4' }), 'replacement.mp4');
+    form.set('expectedSha256', expected);
+    form.set('confirmReplace', confirm);
+    return fetch(`${origin}${videoPath}`, {
+      method: 'PUT',
+      body: form,
+      headers: { cookie: browser.cookie, origin: requestOrigin },
+    });
+  }
+  const baseHash = String(firstVideoReceipt!.sha256),
+    replacement = mp4Fixture(60000);
+  assert.equal((await putVideo(guest, replacement, baseHash)).status, 401);
+  assert.equal((await putVideo(student, replacement, baseHash)).status, 403);
+  assert.equal(
+    (await putVideo(teacher, replacement, baseHash, 'yes', 'https://outside.invalid')).status,
+    403,
+  );
+  assert.equal((await putVideo(teacher, replacement, baseHash, '')).status, 400);
+  assert.equal((await putVideo(teacher, replacement, 'not-a-hash')).status, 400);
+  assert.equal((await putVideo(teacher, replacement, '0'.repeat(64))).status, 409);
+  const replaced = await putVideo(teacher, replacement, baseHash);
+  assert.equal(replaced.status, 200);
+  const replacementReceipt = await replaced.json();
+  assert.equal(replacementReceipt.code, 'videoreplaced');
+  assert.equal(replacementReceipt.durationMs, 60000);
+  const duplicate = await putVideo(teacher, replacement, baseHash);
+  assert.equal(duplicate.status, 200);
+  assert.equal(
+    (await one<{ n: number }>(
+      "SELECT COUNT(*) n FROM audit_log WHERE target_id=? AND action='lesson.video_replaced'",
+      lessonId,
+    ))!.n,
+    1,
+  );
+  const race = await Promise.all([
+    putVideo(teacher, mp4Fixture(40000), replacementReceipt.sha256),
+    putVideo(teacher, mp4Fixture(50000), replacementReceipt.sha256),
+  ]);
+  assert.deepEqual(race.map((r) => r.status).sort(), [200, 409]);
+  assert.deepEqual((await Promise.all(race.map((r) => r.json()))).map((r) => r.code).sort(), [
+    'videoreplaced',
+    'videostale',
+  ]);
+  const latestHash = (await one<{ sha256: string }>(
+    'SELECT sha256 FROM lesson_videos WHERE lesson_id=?',
+    lessonId,
+  ))!.sha256;
+  assert.equal((await putVideo(teacher, uploadedVideo, latestHash)).status, 200);
+  assert(
+    (await teacher.html(`${editorPath}?tab=lecture&lesson=${lessonId}`)).includes(
+      'Бейнені ауыстыру',
+    ),
+  );
+  assert.equal((await guest.get(videoPath)).status, 404);
+  const ownVideo = await teacher.get(videoPath);
+  const ownVideoBytes =
+    ownVideo.status === 302
+      ? await (await fetch(ownVideo.headers.get('location')!)).arrayBuffer()
+      : await ownVideo.arrayBuffer();
+  assert(Buffer.from(ownVideoBytes).equals(uploadedVideo));
   await teacher.submit(`${editorPath}?tab=manage`, { courseId: id }, 'Тексеруге жіберу');
   assert((await teacher.html(editorPath)).includes('Курс тексерілуде'));
   await admin.submit('/admin/review', { courseId: id, decision: 'published' }, 'value="published"');
@@ -526,9 +681,26 @@ try {
   assert(!(await student.html('/profile')).includes('profile-teaching-course'));
   const log = await admin.html('/admin/activity?kind=edit');
   assert(log.includes('audit-event edit') && log.includes('Курс мәліметтері өңделді'));
+  assert(log.includes('Дәрістің бейнесі ауыстырылды'));
   const publishedEditor = await teacher.html(`${editorPath}?tab=materials&lesson=${lessonId}`);
   assert(publishedEditor.includes('PDF және Word материалдары'));
   assert(publishedEditor.includes('Құжат қосу үшін өңдеуді ашу'));
+  const lockedVideoWrite = await postVideo(teacher, uploadedVideo);
+  assert.equal(lockedVideoWrite.status, 409);
+  assert.equal((await lockedVideoWrite.json()).code, 'readonly');
+  assert.equal((await putVideo(teacher, replacement, baseHash)).status, 409);
+  assert.equal((await guest.get(videoPath)).status, postgresTest ? 302 : 200);
+  const publicProgram = await guest.html(`/courses/${id}`);
+  assert.match(
+    publicProgram,
+    /class="resource-tags program-resources"><span>Бейне<\/span><span>PDF<\/span><span>Word<\/span><\/div>/,
+  );
+  assert(!publicProgram.includes(filePath) && !publicProgram.includes(videoPath));
+  if (!postgresTest) {
+    const videoRange = await fetch(`${origin}${videoPath}`, { headers: { range: 'bytes=0-7' } });
+    assert.equal(videoRange.status, 206);
+    assert(Buffer.from(await videoRange.arrayBuffer()).equals(uploadedVideo.subarray(0, 8)));
+  }
   // Reopening must preserve the teacher's task, without trusting arbitrary redirect input.
   for (const [selectedPane, requestedPane, expectedPane, selectedLesson] of [
     ['lecture', 'lecture', 'lecture', lessonId],
@@ -579,18 +751,54 @@ try {
       `Lesson body is not leaked into catalog for ${role}`,
     );
     const catalog = await browser.html('/courses?format=pdf');
-    assert(catalog.includes('library-filters') && catalog.includes('lecture-list-card'));
+    assert(catalog.includes('library-filters') && catalog.includes('library-course-grid'));
+    assert(!catalog.includes('lecture-list-card'));
+    const courseList = await browser.html('/courses?layout=list&view=lectures&format=pdf');
+    assert(courseList.includes('library-course-list') && !courseList.includes('lecture-list-card'));
     assert(!catalog.includes('hero-art') && !catalog.includes('PRIVATE-LESSON-CONTENT'));
     assert(catalog.includes('Пәндер мен курстар'), `Catalog available to ${role}`);
   }
+  const filteredCatalog = await guest.html('/courses?layout=list&sort=title&format=pdf&page=2');
+  const removePdf = filteredCatalog.match(
+    /<a\b[^>]*aria-label="Сүзгіні алып тастау: PDF құжат"[^>]*>/,
+  );
+  assert(removePdf?.[0].includes('href="/courses?layout=list&amp;sort=title"'));
+  const courseLink = (filteredCatalog.match(/<a\b[^>]*class="cover-link"[^>]*>/g) ?? [])
+    .map((tag) => tag.match(/href="([^"]+)"/)?.[1])
+    .find((href) => href?.startsWith(`/courses/${id}?catalog=`));
+  assert(courseLink);
+  const fromCatalog = await guest.html(courseLink.replaceAll('&amp;', '&'));
+  assert.match(
+    fromCatalog,
+    /class="back-link"[^>]*href="\/courses\?format=pdf&amp;sort=title&amp;layout=list"/,
+  );
+  const externalCatalog = await guest.html(`/courses/${id}?catalog=https%3A%2F%2Fexample.invalid`);
+  assert.match(externalCatalog, /class="back-link"[^>]*href="\/courses"/);
   assert.equal((await guest.get(coverPath)).status, 200);
   assert.equal((await guest.get(lectureCoverPath)).status, 200);
   assert((await guest.html(`/learn/${lessonId}`)).includes('PRIVATE-LESSON-CONTENT'));
   const structuredLecture = await guest.html(`/learn/${lessonId}`);
+  assert.match(structuredLecture, /class="lesson-nav selected"[^>]*aria-current="page"/);
   assert(
     structuredLecture.includes('<h2>HTTP section</h2>') &&
       structuredLecture.includes('<pre><code>print(5)'),
   );
+  const lessonLoginLink = structuredLecture.match(
+    /<a\b[^>]*href="([^"]+)"[^>]*>Кіру және осы дәріске оралу →<\/a>/,
+  )?.[1];
+  assert.equal(lessonLoginLink, `/login?next=${encodeURIComponent(`/learn/${lessonId}`)}`);
+  const lessonLogin = new Browser();
+  assert.equal(
+    await lessonLogin.submit(
+      lessonLoginLink!,
+      { email: 'student@integration.invalid', password, next: `/learn/${lessonId}` },
+      'name="password"',
+    ),
+    `/learn/${lessonId}`,
+  );
+  const afterLessonLogin = await lessonLogin.html(`/learn/${lessonId}`);
+  assert(afterLessonLogin.includes('Курсқа өту және жазылу'));
+  assert(!afterLessonLogin.includes('Кіру және осы дәріске оралу'));
   assert((await student.html(`/learn/${lessonId}`)).includes('PRIVATE-LESSON-CONTENT'));
   const enrollmentForm = await student.html(`/courses/${id}`);
   await student.submit(`/courses/${id}`, { courseId: id }, 'name="courseId"', enrollmentForm);
@@ -734,17 +942,26 @@ try {
   const returnCheck = new Browser();
   const chosen = `/learn/${lessonId}#knowledge-check`;
   const loginPath = `/login?next=${encodeURIComponent(chosen)}`;
-  const failedLogin = await returnCheck.submit(
+  const failedLogin = await returnCheck.submitForm(
     loginPath,
-    { email: 'student@integration.invalid', password: 'wrong', next: chosen },
+    { email: 'Student@integration.invalid', password: 'wrong-integration-password', next: chosen },
     'name="password"',
   );
-  assert(new URL(failedLogin, origin).searchParams.get('next') === chosen);
+  assert.equal(failedLogin.status, 200);
+  assert.equal(failedLogin.headers.get('location'), null);
+  const retryHtml = await failedLogin.text();
+  assert(retryHtml.includes('Email немесе құпиясөз дұрыс емес.'));
+  assert.match(retryHtml, /<input[^>]*name="email"[^>]*value="Student@integration\.invalid"/);
+  assert.match(retryHtml, new RegExp(`name="next"[^>]*value="${chosen}"`));
+  assert.doesNotMatch(retryHtml, /<input[^>]*type="password"[^>]*value=/);
+  assert(!retryHtml.includes('wrong-integration-password'));
+  assert.equal((await returnCheck.get('/dashboard')).status, 307);
   assert.equal(
     await returnCheck.submit(
       loginPath,
-      { email: 'student@integration.invalid', password, next: chosen },
+      { email: 'Student@integration.invalid', password, next: chosen },
       'name="password"',
+      retryHtml,
     ),
     chosen,
   );
@@ -755,6 +972,33 @@ try {
     'name="password"',
   );
   assert.equal(unsafeDestination, '/admin');
+  const signupRetry = new Browser();
+  const registerPath = `/register?next=${encodeURIComponent(chosen)}`;
+  const signupName = 'Тіркелуді тексеру';
+  const duplicateSignup = await signupRetry.submitForm(
+    registerPath,
+    { name: signupName, email: 'Student@integration.invalid', password, next: chosen },
+    'name="password"',
+  );
+  assert.equal(duplicateSignup.status, 200);
+  assert.equal(duplicateSignup.headers.get('location'), null);
+  const signupRetryHtml = await duplicateSignup.text();
+  assert(signupRetryHtml.includes('Бұл email арқылы тіркелу мүмкін болмады.'));
+  assert.match(signupRetryHtml, new RegExp(`<input[^>]*name="name"[^>]*value="${signupName}"`));
+  assert.match(signupRetryHtml, /<input[^>]*name="email"[^>]*value="Student@integration\.invalid"/);
+  assert.match(signupRetryHtml, new RegExp(`name="next"[^>]*value="${chosen}"`));
+  assert(!signupRetryHtml.includes(password));
+  assert.equal((await signupRetry.get('/dashboard')).status, 307);
+  assert.equal(
+    await signupRetry.submit(
+      registerPath,
+      { name: signupName, email: 'signup-retry@integration.invalid', password, next: chosen },
+      'name="password"',
+      signupRetryHtml,
+    ),
+    chosen,
+  );
+  assert.equal((await signupRetry.get('/dashboard')).status, 200);
   assert(!(await guest.html(`/learn/${lessonId}?preview=student`)).includes('Редакторға оралу'));
   assert(quizHtml.includes('knowledge-check') && quizHtml.includes('python-practice'));
   assert(!quizHtml.includes('HIDDEN-HTTP-QUIZ-KEY') && !quizHtml.includes('HIDDEN-HTTP-SAMPLE'));
@@ -795,13 +1039,34 @@ try {
     ))!.points,
     3,
   );
+  await run(
+    `INSERT INTO quiz_attempts
+      (id,lesson_id,user_id,quiz_version,submission_key,submitted_at,status,points,max_points,pass_points)
+      SELECT ?,lesson_id,user_id,quiz_version,?,submitted_at-1,'graded',0,max_points,pass_points
+      FROM quiz_attempts WHERE id=?`,
+    randomUUID(),
+    randomUUID(),
+    attempt.id,
+  );
+  const resultLink = `href="/learn/${lessonId}#knowledge-check"`;
+  const studentResults = await student.html('/dashboard');
+  assert.equal(studentResults.split(resultLink).length - 1, 1);
+  assert.match(studentResults.replaceAll('<!-- -->', ''), /3\/3.*Бағаланған/);
   await run('UPDATE lessons SET is_preview = 1 WHERE id = ?', lessonId);
   assert.equal((await guest.get(filePath)).status, 200);
   await run('UPDATE lessons SET is_preview = 0 WHERE id = ?', lessonId);
   assert.equal((await guest.get(filePath)).status, 200);
   assert((await student.html(`/learn/${lessonId}`)).includes('PRIVATE-LESSON-CONTENT'));
   await student.submit(`/learn/${lessonId}`, { lessonId }, 'Оқып шықтым');
-  assert.match(await student.html('/dashboard'), /<progress[^>]*value="100"/);
+  const progressTags = (await student.html('/dashboard')).match(/<progress\b[^>]*>/g) ?? [];
+  assert(progressTags.length >= 2);
+  assert(progressTags.every((tag) => /aria-label="[^"]+ — оқу барысы"/.test(tag)));
+  assert(progressTags.some((tag) => tag.includes('value="100"')));
+  await run("UPDATE courses SET status='archived' WHERE id=?", id);
+  const archivedDashboard = await student.html('/dashboard');
+  assert(!archivedDashboard.includes(`/learn/${lessonId}`));
+  assert.match(archivedDashboard, /Оқылған сабақтар<\/span><strong>0<\/strong>/);
+  await run("UPDATE courses SET status='published' WHERE id=?", id);
   assert.equal(
     (await one<{
       n: number;
@@ -1026,12 +1291,14 @@ try {
     'name="role"',
   );
   assert.equal((await stranger.get('/teacher')).status, 307);
-  const blockedLogin = await stranger.submit(
+  const blockedLogin = await stranger.submitForm(
     '/login',
     { email: 'other@integration.invalid', password },
     'name="password"',
   );
-  assert(blockedLogin.includes('error=credentials'));
+  assert.equal(blockedLogin.status, 200);
+  assert((await blockedLogin.text()).includes('Email немесе құпиясөз дұрыс емес.'));
+  assert.equal((await stranger.get('/profile')).status, 307);
   for (const path of [
     '/admin',
     '/admin/users',
@@ -1336,13 +1603,49 @@ try {
     }>('SELECT email FROM users WHERE id=?', candidateUserId))!.email,
     'candidate@integration.invalid',
   );
+  const contactsPath = '/profile?tab=contacts';
   assert.equal(
-    (await one<{
-      city: string;
-    }>('SELECT city FROM user_profiles WHERE user_id=?', candidateUserId))!.city,
-    'Қызылорда',
+    (await one<{ city: string }>('SELECT city FROM user_profiles WHERE user_id=?', candidateUserId))
+      ?.city,
+    '',
   );
-  assert((await candidate.html('/profile?tab=contacts')).includes('+70000000000'));
+  const contactFields = {
+    profileTab: 'contacts',
+    name: 'Ескі ат',
+    university: 'Ескі университет',
+    phone: '+70000000000',
+    city: 'Қызылорда',
+  };
+  assert.equal(
+    await candidate.submit(
+      contactsPath,
+      { ...contactFields, website: 'ftp://example.invalid' },
+      'name="website"',
+    ),
+    '/profile?tab=contacts&error=profilewebsite',
+  );
+  assert.equal(
+    await candidate.submit(
+      contactsPath,
+      { ...contactFields, website: 'https://example.invalid' },
+      'name="website"',
+    ),
+    '/profile?tab=contacts&success=saved',
+  );
+  assert.equal(
+    (await one<{ name: string }>('SELECT name FROM users WHERE id=?', candidateUserId))?.name,
+    'Өтінім иесі жаңартылған',
+  );
+  assert.deepEqual(
+    {
+      ...(await one<{ university: string; city: string }>(
+        'SELECT university,city FROM user_profiles WHERE user_id=?',
+        candidateUserId,
+      )),
+    },
+    { university: 'Сынақ университеті', city: 'Қызылорда' },
+  );
+  assert((await candidate.html(contactsPath)).includes('+70000000000'));
   const avatarForm = new FormData();
   avatarForm.set('file', new Blob([new Uint8Array(coverBytes)]), 'avatar.png');
   avatarForm.set('userId', studentRow.id);
@@ -1353,7 +1656,20 @@ try {
     redirect: 'manual',
   });
   assert.equal(avatarResponse.status, 303);
+  for (const path of ['/profile', '/courses', '/dashboard']) {
+    const page = await candidate.html(path);
+    assert.match(page, /class="avatar"[^>]*><img[^>]+src="\/api\/profile\/avatar\?v=1"/);
+    assert.match(page, /class="workspace-icon"[^>]*><img[^>]+src="\/api\/profile\/avatar\?v=1"/);
+  }
   assert.equal((await candidate.get('/api/profile/avatar')).status, 200);
+  assert.equal((await candidate.get(`/api/avatars/${candidateUserId}`)).status, 200);
+  assert.equal((await admin.get(`/api/avatars/${candidateUserId}`)).status, 200);
+  assert.equal((await guest.get(`/api/avatars/${candidateUserId}`)).status, 404);
+  assert.equal((await student.get(`/api/avatars/${candidateUserId}`)).status, 404);
+  assert.equal(
+    (await guest.get(`/api/avatars/${candidateUserId}`)).headers.get('cache-control'),
+    'private, no-store',
+  );
   assert.equal((await guest.get('/api/profile/avatar')).status, 404);
   assert.equal((await admin.get(`/api/profile/avatar?userId=${candidateUserId}`)).status, 404);
   assert(
@@ -1390,12 +1706,14 @@ try {
   );
   assert(changedPassword.includes('passwordchanged'));
   assert.equal((await staleSession.get('/profile')).status, 307);
-  const oldLogin = await candidate.submit(
+  const oldLogin = await candidate.submitForm(
     '/login',
     { email: 'candidate@integration.invalid', password },
     'name="password"',
   );
-  assert(oldLogin.includes('error='));
+  assert.equal(oldLogin.status, 200);
+  assert((await oldLogin.text()).includes('Email немесе құпиясөз дұрыс емес.'));
+  assert.equal((await candidate.get('/profile')).status, 307);
   await candidate.submit(
     '/login',
     { email: 'candidate@integration.invalid', password: newPassword },

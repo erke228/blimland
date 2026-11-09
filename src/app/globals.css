@@ -56,8 +56,10 @@ select {
   outline-offset: 4px;
 }
 a:focus-visible,
-button:focus-visible {
+button:focus-visible,
+:where(.notice[tabindex='-1']):focus-visible {
   outline: 3px solid #3cb89d;
+  outline-offset: 4px;
 }
 input:focus,
 textarea:focus,
@@ -162,6 +164,8 @@ main {
 .workspace-icon {
   width: 31px;
   height: 34px;
+  flex-shrink: 0;
+  overflow: hidden;
   border-radius: 8px;
   display: grid;
   place-items: center;
@@ -169,6 +173,11 @@ main {
   border: 1px solid var(--line);
   font-weight: 800;
   color: var(--teal);
+}
+.workspace-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 .workspace strong {
   display: block;
@@ -1405,6 +1414,31 @@ a.program-lesson:hover {
 }
 .lesson-actions .help-text {
   margin-top: 8px;
+}
+.lesson-neighbors {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+.lesson-neighbors .button {
+  justify-content: space-between;
+  min-width: 0;
+  min-height: 44px;
+  text-align: start;
+  white-space: normal;
+}
+.lesson-neighbors .button > span {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.lesson-neighbors small {
+  color: var(--muted);
+}
+.lesson-neighbors svg {
+  flex-shrink: 0;
 }
 .complete-label {
   display: flex;

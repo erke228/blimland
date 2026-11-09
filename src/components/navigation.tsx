@@ -1,24 +1,19 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import {
-  BookOpen,
-  LayoutDashboard,
-  ShieldCheck,
-  Compass,
-  Users,
-  UserRound,
-  House,
-} from 'lucide-react';
+import type { ReactNode } from 'react';
+import { BookOpen, LayoutDashboard, Compass, Users, UserRound, House } from 'lucide-react';
 
 export function Navigation({
   role,
   siteName,
   institutionName,
+  avatar,
 }: {
   role?: string;
   siteName: string;
   institutionName: string;
+  avatar?: ReactNode;
 }) {
   const pathname = usePathname();
   const isTeacher = role === 'teacher' || role === 'admin';
@@ -99,9 +94,11 @@ export function Navigation({
           <span className="brand-dot" />
         </Link>
         <div className="workspace">
-          <span className="workspace-icon">
-            {role === 'admin' ? <ShieldCheck size={19} /> : 'У'}
-          </span>
+          {avatar || (
+            <span className="workspace-icon" aria-hidden="true">
+              <UserRound size={17} />
+            </span>
+          )}
           <div>
             <strong>
               {role === 'admin' ? 'Бас әкімші' : isTeacher ? 'Оқытушы' : role ? 'Студент' : 'Қонақ'}

@@ -15,16 +15,6 @@ export function ProfileEditor({
   tab?: string;
 }) {
   const selected = ['contacts', 'security'].includes(tab || '') ? tab : 'personal';
-  const values = {
-    name: user.name,
-    department: user.department,
-    academicTitle: user.academic_title,
-    university: details.university,
-    about: details.bio,
-    phone: details.phone,
-    city: details.city,
-    website: details.website,
-  };
   return (
     <section className="panel profile-edit-panel">
       <nav className="workspace-tabs profile-tabs">
@@ -71,15 +61,7 @@ export function ProfileEditor({
       )}
       {selected !== 'security' ? (
         <form action={saveProfileAction} className="form-stack">
-          {Object.entries(values)
-            .filter(([key]) =>
-              selected === 'personal'
-                ? ['phone', 'city', 'website'].includes(key)
-                : !['phone', 'city', 'website'].includes(key),
-            )
-            .map(([key, value]) => (
-              <input type="hidden" key={key} name={key} value={value} />
-            ))}
+          <input type="hidden" name="profileTab" value={selected} />
           {selected === 'personal' ? (
             <>
               <h2>Өзіңіз туралы</h2>

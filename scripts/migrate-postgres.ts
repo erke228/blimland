@@ -12,6 +12,8 @@ try {
     ['001_initial', 'db/postgres/001_initial.sql'],
     ['002_learning_tools', 'db/migrations/009_learning_tools.sql'],
     ['003_video_cleanup', 'db/migrations/010_video_cleanup.sql'],
+    ['004_direct_video_uploads', 'db/migrations/011_direct_video_uploads.sql'],
+    ['005_direct_video_final_objects', 'db/migrations/012_direct_video_final_objects.sql'],
   ]) {
     if (
       !(await client.query('SELECT name FROM bilimhub_schema_migrations WHERE name=$1', [name]))
@@ -26,7 +28,7 @@ try {
   }
   await client.query('COMMIT');
   console.log(
-    'PASS: PostgreSQL migrations 001_initial–003_video_cleanup applied/verified (direct connection).',
+    'PASS: PostgreSQL migrations 001_initial–005_direct_video_final_objects applied/verified (direct connection).',
   );
 } catch (error) {
   await client.query('ROLLBACK');

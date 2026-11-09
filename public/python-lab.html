@@ -1,4 +1,4 @@
-<!doctype html><html lang="kk"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net data:; connect-src https://cdn.jsdelivr.net; img-src data:; style-src 'unsafe-inline'; worker-src data:; base-uri 'none'; form-action 'none'"><title>Python нәтижесі</title><style>body{font:16px/1.5 Arial,sans-serif;margin:16px;color:#172b32;background:#fff}pre{font:15px/1.5 Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere}img{max-width:100%;height:auto}#status{color:#32665d}</style></head><body><p id="status" role="status">Іске қосуды күту…</p><pre id="output" aria-live="polite"></pre><div id="plots"></div><script>
+<!doctype html><html lang="kk"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net data:; connect-src https://cdn.jsdelivr.net; img-src data:; style-src 'unsafe-inline'; worker-src data:; base-uri 'none'; form-action 'none'"><title>Python нәтижесі</title><style>:root{color-scheme:light;background:#fff;color:#172b32}:root[data-theme="dark"]{color-scheme:dark;background:#0c1512;color:#ccecdf}body{font:16px/1.5 Arial,sans-serif;margin:16px}pre{font:15px/1.5 Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere}img{max-width:100%;height:auto}#status{color:#32665d}:root[data-theme="dark"] #status{color:#9ae9d5}</style></head><body><p id="status" role="status">Іске қосуды күту…</p><pre id="output" aria-live="polite"></pre><div id="plots"></div><script>
 // This document must remain in an opaque-origin sandbox. It receives only code,
 // has no app cookies or DOM access, and its CSP restricts network access to the runtime CDN.
 const statusNode=document.getElementById('status'),output=document.getElementById('output'),plots=document.getElementById('plots');
@@ -28,13 +28,23 @@ self.onmessage=async(event)=>{
 };`;
 window.addEventListener('message',event=>{
  if(event.source!==parent)return;
+ if(event.data?.type==='lab-theme'){
+  const theme=event.data.theme;
+  if(theme==='dark'||theme==='light')document.documentElement.dataset.theme=theme;
+  return;
+ }
  if(event.data?.type==='lab-stop'){finish('Орындалу тоқтатылды.');return;}
  if(event.data?.type!=='lab-run'||typeof event.data.code!=='string'||event.data.code.length>30000)return;
  if(worker)finish('');requestId=event.data.requestId;output.textContent='';plots.replaceChildren();statusNode.textContent='Python және қажетті кітапханалар жүктелуде…';
- worker=new Worker('data:text/javascript;charset=utf-8,'+encodeURIComponent(workerSource),{type:'module'});
+ const execution=new Worker('data:text/javascript;charset=utf-8,'+encodeURIComponent(workerSource),{type:'module'});
+ worker=execution;
  timer=setTimeout(()=>finish('Орта жүктелмеді. Интернетті тексеріп, қайта іске қосыңыз.'),120000);
- worker.onerror=event=>{output.textContent=event.message||'Ортаны жүктеу қатесі';finish('Қате. Қайта іске қосуға болады.');};
- worker.onmessage=event=>{
+ execution.onerror=event=>{
+  if(worker!==execution)return;
+  output.textContent=event.message||'Ортаны жүктеу қатесі';finish('Қате. Қайта іске қосуға болады.');
+ };
+ execution.onmessage=event=>{
+  if(worker!==execution)return;
   if(event.data.type==='running'){clearTimeout(timer);timer=setTimeout(()=>finish('10 секундтық орындау шегі аяқталды. Кодты қысқартыңыз.'),10000);statusNode.textContent='Код орындалуда…';return;}
   if(event.data.type==='result'||event.data.type==='error'){
    output.textContent=String(event.data.text).slice(0,45000);
@@ -42,6 +52,6 @@ window.addEventListener('message',event=>{
    finish(event.data.type==='error'?'Python қатесі. Кодты түзетіп, қайта іске қосыңыз.':'Орындалды.');
   }
  };
- worker.postMessage({code:event.data.code});
+ execution.postMessage({code:event.data.code});
 });
 </script></body></html>

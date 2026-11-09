@@ -3,48 +3,75 @@ import {
   Search,
   SlidersHorizontal,
   BookOpen,
-  FileText,
-  FileType2,
-  Video,
-  AlignLeft,
-  Clock3,
-  ArrowUpRight,
   GraduationCap,
-  PlayCircle,
   ChevronLeft,
   ChevronRight,
+  LayoutGrid,
+  List,
+  X,
 } from 'lucide-react';
 import { lectureCatalog, type CatalogFilters } from '@/lib/lecture-catalog';
-import { CourseCard, CourseCover, EmptyState, PageHeading } from './ui';
+import { CourseCard, EmptyState, PageHeading } from './ui';
 import { MobileDisclosure } from './mobile-disclosure';
+
+const formats = [
+  ['pdf', 'PDF құжат'],
+  ['docx', 'Word құжат'],
+  ['video', 'Бейнедәріс'],
+  ['text', 'Мәтін'],
+] as const;
+
 export async function LectureCatalog({ filters }: { filters: CatalogFilters }) {
-  const data = await lectureCatalog(filters);
-  const href = (changes: Record<string, string>) =>
-    '/courses?' +
-    new URLSearchParams(
+  const data = await lectureCatalog({ ...filters, view: 'courses' });
+  const href = (changes: Record<string, string>) => {
+    const query = new URLSearchParams(
       Object.fromEntries(
         Object.entries({ ...filters, ...changes }).filter(([, v]) => !!v),
       ) as Record<string, string>,
-    );
-  const active = ['q', 'category', 'teacher', 'level', 'format', 'access'].some(
-    (key) => !!filters[key as keyof CatalogFilters],
-  );
+    ).toString();
+    return query ? `/courses?${query}` : '/courses';
+  };
+  const applied = [
+    ['q', filters.q],
+    ['category', filters.category],
+    [
+      'teacher',
+      filters.teacher
+        ? (data.teachers.find((teacher) => teacher.id === filters.teacher)?.name ?? 'Оқытушы')
+        : undefined,
+    ],
+    ['level', filters.level],
+    ['format', formats.find(([value]) => value === filters.format)?.[1]],
+    ['access', filters.access === 'open' ? 'Ашық сабақтар' : undefined],
+  ] as const;
+  const active = applied.filter(([, label]) => Boolean(label));
+  const clearHref = href({
+    q: '',
+    category: '',
+    teacher: '',
+    level: '',
+    format: '',
+    access: '',
+    page: '',
+  });
+  const list = filters.layout === 'list';
+  const catalogQuery = href({ view: '', page: data.page > 1 ? String(data.page) : '' }).split(
+    '?',
+  )[1];
+  const catalogContext = catalogQuery ? `?catalog=${encodeURIComponent(catalogQuery)}` : '';
   return (
-    <>
+    <div className="course-catalog">
       <PageHeading
         eyebrow="ОҚУ КІТАПХАНАСЫ"
         title="Пәндер мен курстар"
-        description="Курс — бір тақырыпқа біріктірілген дәрістер жинағы. Алдымен курсты таңдаңыз немесе жеке дәрісті іздеңіз."
+        description="Курс — бір тақырыпқа біріктірілген дәрістер жинағы. Курсты таңдаңыз: дәрістер, материалдар мен тесттер оның ішінде орналасқан."
       />
       <div className="library-summary">
         <span>
           <BookOpen size={17} />
           <b>{data.totals.courses}</b> курс
         </span>
-        <span>
-          <FileText size={17} />
-          <b>{data.totals.lectures}</b> дәріс
-        </span>
+
         <span>
           <GraduationCap size={18} />
           <b>{data.totals.teachers}</b> оқытушы
@@ -56,20 +83,21 @@ export async function LectureCatalog({ filters }: { filters: CatalogFilters }) {
             <h2>
               <SlidersHorizontal size={18} /> Іріктеу
             </h2>
-            {active && (
-              <Link href="/courses" className="text-link">
+            {!!active.length && (
+              <Link href={clearHref} className="text-link">
                 Тазарту
               </Link>
             )}
           </div>
           <form action="/courses" method="get" className="form-stack">
             <div className="library-search-field">
-              <label htmlFor="lecture-search">Дәріс немесе тақырып</label>
+              <label htmlFor="lecture-search">Курс немесе тақырып</label>
               <div className="library-search">
                 <Search size={18} />
                 <input
+                  key={filters.q || ''}
                   id="lecture-search"
-                  aria-label="Дәріс немесе тақырып"
+                  aria-label="Курс немесе тақырып"
                   name="q"
                   defaultValue={filters.q}
                   placeholder="Тақырып, пән, оқытушы…"
@@ -88,15 +116,13 @@ export async function LectureCatalog({ filters }: { filters: CatalogFilters }) {
               key={JSON.stringify(filters)}
               title="Сүзгілер"
               summary={
-                active ? 'Іріктеу параметрлері таңдалған' : 'Бағыт, оқытушы және материал пішімі'
+                active.length
+                  ? 'Іріктеу параметрлері таңдалған'
+                  : 'Бағыт, оқытушы және материал пішімі'
               }
               className="filter-disclosure"
               filter
-              badge={
-                ['q', 'category', 'teacher', 'level', 'format', 'access'].filter(
-                  (key) => !!filters[key as keyof CatalogFilters],
-                ).length
-              }
+              badge={active.length}
             >
               <label>
                 Білім бағыты
@@ -131,20 +157,21 @@ export async function LectureCatalog({ filters }: { filters: CatalogFilters }) {
                 Материал пішімі
                 <select name="format" defaultValue={filters.format || ''}>
                   <option value="">Барлық пішім</option>
-                  <option value="pdf">PDF құжат</option>
-                  <option value="docx">Word құжат</option>
-                  <option value="video">Бейнедәріс</option>
-                  <option value="text">Мәтін</option>
+                  {formats.map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
                 </select>
               </label>
-              <input type="hidden" name="view" value={data.view} />
+              <input type="hidden" name="layout" value={list ? 'list' : 'cards'} />
               <input type="hidden" name="sort" value={filters.sort || ''} />
               <button className="button primary full-width">
                 <Search size={17} />
                 Нәтижелерді көрсету
               </button>
-              {active && (
-                <Link className="filter-reset" href="/courses">
+              {!!active.length && (
+                <Link className="filter-reset" href={clearHref}>
                   Барлық сүзгіні тазарту
                 </Link>
               )}
@@ -153,20 +180,22 @@ export async function LectureCatalog({ filters }: { filters: CatalogFilters }) {
         </aside>
         <section className="library-results" aria-label="Каталог нәтижелері">
           <div className="library-toolbar">
-            <nav className="library-view">
+            <nav className="library-view" aria-label="Курстардың көрінісі">
               <Link
-                href={href({ view: 'lectures', page: '' })}
-                className={data.view === 'lectures' ? 'selected' : ''}
+                href={href({ layout: 'cards', view: '', page: '' })}
+                className={!list ? 'selected' : ''}
+                aria-current={!list ? 'page' : undefined}
               >
-                <FileText size={17} />
-                Дәрістер
+                <LayoutGrid size={17} />
+                Карточкалар
               </Link>
               <Link
-                href={href({ view: 'courses', page: '' })}
-                className={data.view === 'courses' ? 'selected' : ''}
+                href={href({ layout: 'list', view: '', page: '' })}
+                className={list ? 'selected' : ''}
+                aria-current={list ? 'page' : undefined}
               >
-                <BookOpen size={17} />
-                Курстар
+                <List size={17} />
+                Тізім
               </Link>
             </nav>
             <details className="library-sort">
@@ -189,96 +218,38 @@ export async function LectureCatalog({ filters }: { filters: CatalogFilters }) {
             </details>
           </div>
           <p className="library-result-count">
-            <strong>{data.total}</strong> {data.view === 'lectures' ? 'дәріс' : 'курс'} табылды
-            {filters.q && <> · «{filters.q}»</>}
+            <strong>{data.total}</strong> курс табылды
           </p>
+          {!!active.length && (
+            <ul className="library-applied-filters" aria-label="Қолданылған сүзгілер">
+              {active.map(([key, label]) => (
+                <li key={key}>
+                  <Link
+                    href={href({ [key]: '', page: '' })}
+                    aria-label={`Сүзгіні алып тастау: ${label}`}
+                  >
+                    {label} <X size={16} aria-hidden="true" />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
           {!data.total ? (
             <EmptyState
               title="Материал табылмады"
               description="Басқа іздеу сөзін немесе іріктеу параметрлерін қолданып көріңіз."
-              href="/courses"
+              href={clearHref}
               label="Іріктеуді тазарту"
             />
-          ) : data.view === 'courses' ? (
-            <div className="library-course-grid">
-              {data.courses.map((c) => (
-                <CourseCard key={c.id} course={c} />
-              ))}
-            </div>
           ) : (
-            <div className="lecture-list">
-              {data.results.map((l) => {
-                const course = data.courseMap.get(l.course_id)!;
-                return (
-                  <article key={l.id} className="lecture-list-card">
-                    <Link className="lecture-list-art" href={`/learn/${l.id}`} aria-label={l.title}>
-                      <CourseCover course={course} />
-                    </Link>
-                    <div className="lecture-list-body">
-                      <div className="lecture-list-top">
-                        <Link
-                          className="category-label"
-                          href={href({ category: l.category, page: '' })}
-                        >
-                          {l.category}
-                        </Link>
-                        <span className="lecture-access open">
-                          <PlayCircle size={13} /> Ашық дәріс
-                        </span>
-                      </div>
-                      <h2>
-                        <Link href={`/learn/${l.id}`}>{l.title}</Link>
-                      </h2>
-                      <Link className="lecture-parent" href={`/courses/${l.course_id}`}>
-                        {l.course_title} · {l.section_title}
-                      </Link>
-                      <div className="lecture-meta">
-                        <span>
-                          <GraduationCap size={15} />
-                          {l.teacher}
-                        </span>
-                        <span>
-                          <Clock3 size={14} />
-                          {l.duration_minutes} мин
-                        </span>
-                        <span>{l.level}</span>
-                      </div>
-                      <div className="lecture-list-bottom">
-                        <div className="resource-tags">
-                          {l.has_pdf > 0 && (
-                            <span>
-                              <FileText size={13} />
-                              PDF
-                            </span>
-                          )}
-                          {l.has_docx > 0 && (
-                            <span>
-                              <FileType2 size={13} />
-                              Word
-                            </span>
-                          )}
-                          {l.has_video > 0 && (
-                            <span>
-                              <Video size={13} />
-                              Бейне
-                            </span>
-                          )}
-                          {l.has_text > 0 && (
-                            <span>
-                              <AlignLeft size={13} />
-                              Мәтін
-                            </span>
-                          )}
-                        </div>
-                        <Link className="text-link" href={`/learn/${l.id}`}>
-                          Дәрісті ашу
-                          <ArrowUpRight size={16} />
-                        </Link>
-                      </div>
-                    </div>
-                  </article>
-                );
-              })}
+            <div className={list ? 'library-course-list' : 'library-course-grid'}>
+              {data.courses.map((c) => (
+                <CourseCard
+                  key={c.id}
+                  course={c}
+                  courseHref={`/courses/${c.id}${catalogContext}`}
+                />
+              ))}
             </div>
           )}
           {data.pages > 1 && (
@@ -302,6 +273,6 @@ export async function LectureCatalog({ filters }: { filters: CatalogFilters }) {
           )}
         </section>
       </div>
-    </>
+    </div>
   );
 }

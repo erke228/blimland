@@ -1,5 +1,10 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "git": {
+    "deploymentEnabled": {
+      "codex/platform-foundation": false
+    }
+  },
   "regions": ["cle1"],
   "fluid": true
 }

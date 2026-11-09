@@ -9,6 +9,7 @@ export type CatalogFilters = {
   access?: string;
   sort?: string;
   view?: string;
+  layout?: string;
   page?: string;
 };
 export type LectureListing = {

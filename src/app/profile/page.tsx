@@ -39,7 +39,7 @@ export default async function Profile({
         title="Менің профилім"
         description="Жеке мәліметтеріңіз бен оқу ортаңыз бір жерде."
       />
-      <Notice {...query} />
+      <Notice error={query.error} success={query.success} focusId="profile-feedback" />
       <div className="profile-identity">
         <span className="profile-avatar" aria-hidden="true">
           {details.has_avatar ? (

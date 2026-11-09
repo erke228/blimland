@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { BookOpen, CheckCircle2, ArrowUpRight, Play } from 'lucide-react';
 import { requireUser } from '@/lib/auth';
-import { all, one } from '@/lib/db';
+import { all } from '@/lib/db';
 import { courseLessons, getCourse, type Course } from '@/lib/courses';
 import { CourseCard, EmptyState, Notice, PageHeading } from '@/components/ui';
 export default async function Dashboard({
@@ -21,7 +21,18 @@ export default async function Dashboard({
     max_points: number;
     status: string;
   }>(
-    `SELECT a.id,a.lesson_id,l.title,a.points,a.max_points,a.status FROM quiz_attempts a JOIN lessons l ON l.id=a.lesson_id JOIN sections s ON s.id=l.section_id JOIN courses c ON c.id=s.course_id WHERE a.user_id=? AND c.status='published' ORDER BY a.submitted_at DESC LIMIT 10`,
+    `SELECT a.id,a.lesson_id,l.title,a.points,a.max_points,a.status
+      FROM quiz_attempts a JOIN lessons l ON l.id=a.lesson_id
+      JOIN sections s ON s.id=l.section_id JOIN courses c ON c.id=s.course_id
+      WHERE a.user_id=? AND c.status='published'
+        AND NOT EXISTS(SELECT 1 FROM section_trash t WHERE t.section_id=s.id)
+        AND NOT EXISTS (
+          SELECT 1 FROM quiz_attempts newer
+          WHERE newer.user_id=a.user_id AND newer.lesson_id=a.lesson_id
+            AND (newer.submitted_at>a.submitted_at
+              OR (newer.submitted_at=a.submitted_at AND newer.id>a.id))
+        )
+      ORDER BY a.submitted_at DESC,a.id DESC LIMIT 10`,
     user.id,
   );
   const ids = await all<{
@@ -30,41 +41,31 @@ export default async function Dashboard({
   const courses = (
     await Promise.all(ids.map(async (row) => await getCourse(row.course_id)))
   ).filter((c): c is Course => !!c && c.status === 'published');
-  const complete = (await one<{
-    n: number;
-  }>(
-    'SELECT COUNT(*) n FROM lesson_progress WHERE user_id = ? AND completed_at IS NOT NULL',
+  const completed = await all<{ course_id: string; lesson_id: string }>(
+    `SELECT s.course_id,p.lesson_id FROM lesson_progress p
+      JOIN lessons l ON l.id=p.lesson_id JOIN sections s ON s.id=l.section_id
+      JOIN courses c ON c.id=s.course_id
+      JOIN enrollments e ON e.course_id=c.id AND e.user_id=p.user_id
+      WHERE p.user_id=? AND p.completed_at IS NOT NULL AND c.status='published'
+        AND NOT EXISTS(SELECT 1 FROM section_trash t WHERE t.section_id=s.id)`,
     user.id,
-  ))!.n;
-  const completedByCourse = new Map(
-    (
-      await all<{
-        course_id: string;
-        n: number;
-      }>(
-        `SELECT s.course_id,COUNT(*) n FROM lesson_progress p JOIN lessons l ON l.id=p.lesson_id JOIN sections s ON s.id=l.section_id WHERE p.user_id=? AND p.completed_at IS NOT NULL AND NOT EXISTS(SELECT 1 FROM section_trash t WHERE t.section_id=s.id) GROUP BY s.course_id`,
-        user.id,
-      )
-    ).map((row) => [row.course_id, row.n]),
   );
-  const progress = (course: Course) =>
-    Math.min(
-      100,
-      Math.round(
-        (100 * (completedByCourse.get(course.id) || 0)) / Math.max(1, course.lesson_count),
-      ),
-    );
-  const resumeCourse = courses.find((course) => progress(course) < 100) || courses[0];
-  const completedIds = new Set(
-    (
-      await all<{
-        lesson_id: string;
-      }>(
-        'SELECT lesson_id FROM lesson_progress WHERE user_id=? AND completed_at IS NOT NULL',
-        user.id,
-      )
-    ).map((row) => row.lesson_id),
-  );
+  const completedByCourse = new Map<string, number>();
+  for (const { course_id } of completed)
+    completedByCourse.set(course_id, (completedByCourse.get(course_id) || 0) + 1);
+  const completedCount = (course: Course) => completedByCourse.get(course.id) || 0;
+  const progress = (course: Course) => {
+    if (!course.lesson_count) return 0;
+    const count = completedCount(course);
+    return count >= course.lesson_count
+      ? 100
+      : Math.min(99, Math.round((100 * count) / course.lesson_count));
+  };
+  const availableCourses = courses.filter((course) => course.lesson_count > 0);
+  const resumeCourse =
+    availableCourses.find((course) => completedCount(course) < course.lesson_count) ||
+    availableCourses[0];
+  const completedIds = new Set(completed.map((row) => row.lesson_id));
   const resumeLessons = resumeCourse ? await courseLessons(resumeCourse.id) : [];
   const resumeLesson =
     resumeLessons.find((lesson) => !completedIds.has(lesson.id)) || resumeLessons[0];
@@ -91,7 +92,11 @@ export default async function Dashboard({
           <div className="resume-progress">
             <span>Курс барысы</span>
             <strong>{progress(resumeCourse)}%</strong>
-            <progress value={progress(resumeCourse)} max={100} />
+            <progress
+              aria-label={`${resumeCourse.title} — оқу барысы`}
+              value={progress(resumeCourse)}
+              max={100}
+            />
           </div>
           <Link href={`/learn/${resumeLesson.id}`} className="button primary">
             <Play size={18} />
@@ -109,7 +114,7 @@ export default async function Dashboard({
         <div className="stat-card">
           <CheckCircle2 />
           <span>Оқылған сабақтар</span>
-          <strong>{complete}</strong>
+          <strong>{completed.length}</strong>
         </div>
       </div>
       <div className="section-title">
@@ -120,7 +125,7 @@ export default async function Dashboard({
       </div>
       {!!assessments.length && (
         <section className="panel">
-          <h2>Соңғы тест әрекеттері</h2>
+          <h2>Соңғы тест нәтижелері</h2>
           {assessments.map((a) => (
             <p key={a.id}>
               <Link className="text-link" href={`/learn/${a.lesson_id}#knowledge-check`}>

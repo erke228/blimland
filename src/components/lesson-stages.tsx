@@ -2,6 +2,13 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { BookOpen, Code2, ClipboardCheck, ArrowRight } from 'lucide-react';
 
+function showStageNavigation(root: HTMLElement | null, id: string) {
+  root?.scrollIntoView({ block: 'start' });
+  root
+    ?.querySelector<HTMLButtonElement>(`button[aria-controls="stage-${id}"]`)
+    ?.focus({ preventScroll: true });
+}
+
 export function LessonStages({
   lesson,
   practice,
@@ -44,17 +51,23 @@ export function LessonStages({
   ];
   const [active, setActive] = useState('lesson-content');
   const root = useRef<HTMLElement>(null);
+  const hasPractice = Boolean(practice);
+  const hasQuiz = Boolean(quiz);
   useEffect(() => {
-    const sync = () =>
-      setActive(
-        ['#python-practice', '#knowledge-check'].includes(location.hash)
-          ? location.hash.slice(1)
-          : 'lesson-content',
-      );
+    const sync = () => {
+      const id = location.hash.slice(1);
+      const available =
+        id === 'lesson-content' ||
+        (id === 'python-practice' && hasPractice) ||
+        (id === 'knowledge-check' && hasQuiz);
+      setActive(available ? id : 'lesson-content');
+      // The native anchor may be hidden before hydration. Its stage button is already visible.
+      if (available) showStageNavigation(root.current, id);
+    };
     sync();
     window.addEventListener('hashchange', sync);
     return () => window.removeEventListener('hashchange', sync);
-  }, []);
+  }, [hasPractice, hasQuiz]);
   const index = Math.max(
     0,
     stages.findIndex((s) => s.id === active),
@@ -62,10 +75,7 @@ export function LessonStages({
   function choose(id: string) {
     setActive(id);
     history.replaceState(null, '', '#' + id);
-    root.current?.scrollIntoView({ block: 'start' });
-    root.current
-      ?.querySelector<HTMLButtonElement>(`button[aria-controls="stage-${id}"]`)
-      ?.focus({ preventScroll: true });
+    showStageNavigation(root.current, id);
   }
   return (
     <section className="lesson-stages" ref={root} aria-label="Дәріспен жұмыс">

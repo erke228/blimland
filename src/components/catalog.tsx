@@ -63,14 +63,7 @@ export async function Catalog({ q = '', category = '' }: { q?: string; category?
             {startLabel} <ArrowUpRight size={17} />
           </Link>
           {featured ? (
-            <Link
-              className="hero-lecture"
-              href={
-                featured.first_lesson_preview
-                  ? `/learn/${featured.first_lesson_id}`
-                  : `/courses/${featured.id}`
-              }
-            >
+            <Link className="hero-lecture" href={`/learn/${featured.first_lesson_id}`}>
               <BookOpen size={20} />
               <span>
                 <small>ДӘРІСТІ АШУ</small>

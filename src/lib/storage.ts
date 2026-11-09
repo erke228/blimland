@@ -1,5 +1,8 @@
 import { mkdir, writeFile, readFile, unlink } from 'node:fs/promises';
 import { dirname } from 'node:path';
+import { createReadStream } from 'node:fs';
+import { Readable } from 'node:stream';
+import { readExactVideoBytes, validateStoredVideoSize } from './bounded-storage-read';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import {
   S3Client,
@@ -8,6 +11,8 @@ import {
   DeleteObjectCommand,
 } from '@aws-sdk/client-s3';
 import { usesPostgres } from './db';
+import { signDirectVideoPost } from './direct-video-policy';
+import type { DirectVideoReservation } from './direct-video-uploads';
 
 const bucket = 'bilimhub-files';
 let client: S3Client | undefined;
@@ -49,6 +54,10 @@ export async function privateVideoUrl(key: string) {
     { expiresIn: 300 },
   );
 }
+export async function privateVideoUploadPost(reservation: DirectVideoReservation) {
+  if (!usesObjectStorage()) throw new Error('Direct upload requires private object storage.');
+  return signDirectVideoPost(s3(), reservation);
+}
 export async function putStored(
   key: string,
   path: string,
@@ -77,6 +86,48 @@ export async function getStored(key: string, path: string): Promise<Buffer> {
   const object = await s3().send(new GetObjectCommand({ Bucket: bucket, Key: key }));
   if (!object.Body) throw new Error('Storage object is empty.');
   return Buffer.from(await object.Body.transformToByteArray());
+}
+// For untrusted staging uploads only; do not buffer an unchecked remote object.
+export async function getReservedVideoBytes(
+  key: string,
+  path: string,
+  expectedBytes: number,
+  timeoutMs = 30000,
+) {
+  checkedKey(key);
+  if (!key.startsWith('videos/')) throw new Error('A video key is required.');
+  validateStoredVideoSize(expectedBytes);
+  if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 30000)
+    throw new Error('Invalid staging read timeout.');
+  const controller = new AbortController();
+  const timeoutError = new Error('Staging video read timed out.');
+  let body: Readable | undefined;
+  const stop = () => body?.destroy(timeoutError);
+  const timer = setTimeout(() => controller.abort(timeoutError), timeoutMs);
+  timer.unref();
+  try {
+    if (!usesObjectStorage()) body = createReadStream(/* turbopackIgnore: true */ path);
+    else {
+      const object = await s3().send(new GetObjectCommand({ Bucket: bucket, Key: key }), {
+        abortSignal: controller.signal,
+      });
+      if (!(object.Body instanceof Readable)) throw new Error('A Node storage stream is required.');
+      body = object.Body;
+      if (object.ContentLength !== undefined && object.ContentLength !== expectedBytes)
+        throw new Error('Storage object size differs from reservation.');
+    }
+    controller.signal.throwIfAborted();
+    // The SDK request may already have returned headers; still abort the response body.
+    controller.signal.addEventListener('abort', stop, { once: true });
+    return await readExactVideoBytes(body, expectedBytes);
+  } catch (error) {
+    if (controller.signal.aborted) throw timeoutError;
+    throw error;
+  } finally {
+    clearTimeout(timer);
+    controller.signal.removeEventListener('abort', stop);
+    body?.destroy();
+  }
 }
 export async function deleteStored(key: string, path: string) {
   checkedKey(key);

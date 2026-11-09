@@ -2,6 +2,8 @@ import Link from 'next/link';
 import { ArrowUpRight, BookOpen } from 'lucide-react';
 import type { Course } from '@/lib/courses';
 import { CoverIllustration } from './cover-illustration';
+import { UserAvatar } from './user-avatar';
+import { FocusedNotice } from './focused-notice';
 
 export function CourseCover({
   course,
@@ -24,10 +26,18 @@ export function CourseCover({
     );
   return <CoverIllustration preset={course.cover_preset} large={large} />;
 }
-export function CourseCard({ course, progress }: { course: Course; progress?: number }) {
+export function CourseCard({
+  course,
+  progress,
+  courseHref = `/courses/${course.id}`,
+}: {
+  course: Course;
+  progress?: number;
+  courseHref?: string;
+}) {
   return (
     <article className="course-card">
-      <Link href={`/courses/${course.id}`} className="cover-link" aria-label={course.title}>
+      <Link href={courseHref} className="cover-link" aria-label={course.title}>
         <CourseCover course={course} />
       </Link>
       <div className="course-card-body">
@@ -36,7 +46,7 @@ export function CourseCard({ course, progress }: { course: Course; progress?: nu
           <span className="level">{course.level}</span>
         </div>
         <h3>
-          <Link href={`/courses/${course.id}`}>{course.title}</Link>
+          <Link href={courseHref}>{course.title}</Link>
         </h3>
         <p className="course-description">{course.description}</p>
         {course.first_lesson_id && (
@@ -50,7 +60,7 @@ export function CourseCard({ course, progress }: { course: Course; progress?: nu
           </Link>
         )}
         <div className="teacher-line">
-          <span className="tiny-avatar">{course.teacher[0]}</span>
+          <UserAvatar id={course.owner_id} name={course.teacher} />
           {course.teacher}
         </div>
         <div className="card-footer">
@@ -58,6 +68,9 @@ export function CourseCard({ course, progress }: { course: Course; progress?: nu
             <BookOpen size={15} />
             {course.lesson_count} сабақ
           </span>
+          <Link className="text-link" href={courseHref}>
+            Курсты ашу <ArrowUpRight size={15} />
+          </Link>
         </div>
         {progress !== undefined && (
           <div className="course-progress">
@@ -65,7 +78,7 @@ export function CourseCard({ course, progress }: { course: Course; progress?: nu
               <span>Оқу барысы</span>
               <b>{progress}%</b>
             </div>
-            <progress value={progress} max={100} />
+            <progress aria-label={`${course.title} — оқу барысы`} value={progress} max={100} />
           </div>
         )}
       </div>
@@ -121,7 +134,15 @@ export function EmptyState({
     </div>
   );
 }
-export function Notice({ error, success }: { error?: string; success?: string }) {
+export function Notice({
+  error,
+  success,
+  focusId,
+}: {
+  error?: string;
+  success?: string;
+  focusId?: string;
+}) {
   const errors: Record<string, string> = {
     registration: 'Атыңызды, дұрыс email және кемінде 12 таңбалы құпиясөзді енгізіңіз.',
     email: 'Бұл email арқылы тіркелу мүмкін болмады. Егер аккаунтыңыз болса, кіріңіз.',
@@ -182,19 +203,16 @@ export function Notice({ error, success }: { error?: string; success?: string })
     removed: 'Топ мүшелігі өзгертілді. Оқу тарихы мен курсқа жазылу сақталды.',
     sessionsrevoked: 'Пайдаланушының барлық белсенді сессиялары аяқталды.',
   };
-  if (error)
-    return (
-      <div className="notice error" role="alert">
-        {errors[error] || errors.invalid}
-      </div>
-    );
-  if (success)
-    return (
-      <div className="notice success" role="status">
-        {successes[success] || successes.saved}
-      </div>
-    );
-  return null;
+  if (!error && !success) return null;
+  const message = error
+    ? errors[error] || errors.invalid
+    : successes[success ?? ''] || successes.saved;
+  if (focusId) return <FocusedNotice id={focusId} error={Boolean(error)} message={message} />;
+  return (
+    <div className={error ? 'notice error' : 'notice success'} role={error ? 'alert' : 'status'}>
+      {message}
+    </div>
+  );
 }
 export const statusLabel: Record<string, string> = {
   draft: 'Жоба',

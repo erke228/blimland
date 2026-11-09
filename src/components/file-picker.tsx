@@ -10,6 +10,8 @@ export function FilePicker({
   image = false,
   previewImage = false,
   onFile,
+  name = 'file',
+  disabled = false,
 }: {
   label: string;
   accept: string;
@@ -18,6 +20,8 @@ export function FilePicker({
   image?: boolean;
   previewImage?: boolean;
   onFile?: (file?: File) => void;
+  name?: string;
+  disabled?: boolean;
 }) {
   const id = useId(),
     input = useRef<HTMLInputElement>(null);
@@ -63,7 +67,8 @@ export function FilePicker({
         <input
           ref={input}
           id={id}
-          name="file"
+          name={name}
+          disabled={disabled}
           type="file"
           accept={accept}
           required={required}
@@ -81,6 +86,7 @@ export function FilePicker({
           <button
             type="button"
             aria-label="Таңдалған файлды алып тастау"
+            disabled={disabled}
             onClick={() => {
               if (input.current) input.current.value = '';
               choose();

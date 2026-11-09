@@ -32,25 +32,39 @@ export async function ownProfile(id: string): Promise<ProfileDetails> {
     }),
   };
 }
-export async function saveExtendedProfile(id: string, input: unknown) {
+export async function saveExtendedProfile(
+  id: string,
+  input: unknown,
+  section: 'personal' | 'contacts' | 'all' = 'all',
+) {
   await actor(id);
-  const parsed = z
-    .object({
-      name: z.string().trim().min(2).max(80),
-      department: z.string().trim().max(180),
-      academic_title: z.string().trim().max(120),
-      university: z.string().trim().max(180).default(''),
-      bio: z.string().trim().max(3000).default(''),
-      phone: z.string().trim().max(40).default(''),
-      city: z.string().trim().max(120).default(''),
-      website: z.string().trim().max(500).default(''),
-    })
-    .safeParse(input);
-  if (!parsed.success) throw new ManagementError('userform');
-  const d = parsed.data;
-  if (d.website) {
+  const personal =
+    section === 'contacts'
+      ? null
+      : z
+          .object({
+            name: z.string().trim().min(2).max(80),
+            department: z.string().trim().max(180),
+            academic_title: z.string().trim().max(120),
+            university: z.string().trim().max(180).default(''),
+            bio: z.string().trim().max(3000).default(''),
+          })
+          .safeParse(input);
+  const contacts =
+    section === 'personal'
+      ? null
+      : z
+          .object({
+            phone: z.string().trim().max(40).default(''),
+            city: z.string().trim().max(120).default(''),
+            website: z.string().trim().max(500).default(''),
+          })
+          .safeParse(input);
+  if ((personal && !personal.success) || (contacts && !contacts.success))
+    throw new ManagementError('userform');
+  if (contacts?.data.website) {
     try {
-      const url = new URL(d.website);
+      const url = new URL(contacts.data.website);
       if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password)
         throw new Error();
     } catch {
@@ -58,16 +72,27 @@ export async function saveExtendedProfile(id: string, input: unknown) {
     }
   }
   await transaction(async () => {
-    await updateOwnProfile(id, d);
-    await run(
-      `INSERT INTO user_profiles(user_id,university,bio,phone,city,website) VALUES (?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET university=excluded.university,bio=excluded.bio,phone=excluded.phone,city=excluded.city,website=excluded.website`,
-      id,
-      d.university,
-      d.bio,
-      d.phone,
-      d.city,
-      d.website,
-    );
+    if (personal) {
+      await updateOwnProfile(id, personal.data);
+      await run(
+        `INSERT INTO user_profiles(user_id,university,bio) VALUES (?,?,?)
+         ON CONFLICT(user_id) DO UPDATE SET university=excluded.university,bio=excluded.bio`,
+        id,
+        personal.data.university,
+        personal.data.bio,
+      );
+    }
+    if (contacts) {
+      await run(
+        `INSERT INTO user_profiles(user_id,phone,city,website) VALUES (?,?,?,?)
+         ON CONFLICT(user_id) DO UPDATE SET phone=excluded.phone,city=excluded.city,website=excluded.website`,
+        id,
+        contacts.data.phone,
+        contacts.data.city,
+        contacts.data.website,
+      );
+      if (!personal) await recordAudit(id, 'profile.updated', id);
+    }
   });
 }
 async function credentialUser(id: string, password: string) {

@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ArrowLeft, ArrowRight, CheckCircle2, LockKeyhole } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CheckCircle2 } from 'lucide-react';
 import { currentUser } from '@/lib/auth';
 import { one } from '@/lib/db';
 import { courseLessons, getCourse, type Lesson } from '@/lib/courses';
@@ -43,6 +43,7 @@ export default async function Learn({
     notFound();
   const course = (await getCourse(lesson.course_id))!;
   const user = await currentUser();
+  const loginHref = `/login?next=${encodeURIComponent(`/learn/${id}`)}`;
   const owner = !!user && (course.owner_id === user.id || user.role === 'admin');
   const query = await searchParams;
   const previewMode = owner && query.preview === 'student';
@@ -137,11 +138,11 @@ export default async function Learn({
             <div className="lesson-access-note">
               <strong>Бұл — ашық дәріс.</strong>
               <p>
-                Дәрістерді кез келген ретпен оқи аласыз. Тест нәтижелері мен оқу барысын сақтау үшін
-                курсқа жазылыңыз.
+                Дәрістерді кез келген ретпен оқи аласыз. Тест нәтижелері мен оқу барысын сақтау үшін{' '}
+                {user ? 'курсқа жазылыңыз.' : 'аккаунтыңызға кіріп, курсқа жазылыңыз.'}
               </p>
-              <Link className="text-link" href={`/courses/${course.id}`}>
-                Курсқа өту және жазылу →
+              <Link className="text-link" href={user ? `/courses/${course.id}` : loginHref}>
+                {user ? 'Курсқа өту және жазылу →' : 'Кіру және осы дәріске оралу →'}
               </Link>
             </div>
           )}
@@ -193,29 +194,42 @@ export default async function Learn({
                   <p className="help-text">Бұл — қолмен белгілеу, білімді бағалау емес.</p>
                 </form>
               )
-            ) : (
-              <Link href={`/courses/${course.id}`} className="button primary">
-                Оқу барысын сақтау
+            ) : course.status === 'published' ? (
+              <Link href={user ? `/courses/${course.id}` : loginHref} className="button primary">
+                {user ? 'Курсқа өту және жазылу' : 'Кіру және осы дәріске оралу'}
               </Link>
-            )}
-            {next && (
-              <Link
-                href={`/learn/${next.id}${previewMode ? '?preview=student' : ''}`}
-                className="button outline"
-              >
-                Келесі сабақ <ArrowRight size={16} />
-              </Link>
-            )}
-            {previous && (
-              <Link
-                href={`/learn/${previous.id}${previewMode ? '?preview=student' : ''}`}
-                className="button outline"
-              >
-                <ArrowLeft size={16} />
-                Алдыңғы сабақ
-              </Link>
-            )}
+            ) : null}
           </div>
+          {(previous || next) && (
+            <nav className="lesson-neighbors" aria-label="Сабақтар арасында өту">
+              {previous && (
+                <Link
+                  href={`/learn/${previous.id}${previewMode ? '?preview=student' : ''}`}
+                  rel="prev"
+                  className="button outline"
+                >
+                  <ArrowLeft size={16} aria-hidden="true" />
+                  <span>
+                    <small>Алдыңғы сабақ</small>
+                    <strong>{previous.title}</strong>
+                  </span>
+                </Link>
+              )}
+              {next && (
+                <Link
+                  href={`/learn/${next.id}${previewMode ? '?preview=student' : ''}`}
+                  rel="next"
+                  className="button outline"
+                >
+                  <span>
+                    <small>Келесі сабақ</small>
+                    <strong>{next.title}</strong>
+                  </span>
+                  <ArrowRight size={16} aria-hidden="true" />
+                </Link>
+              )}
+            </nav>
+          )}
         </article>
         <aside className="panel learning-sidebar">
           <MobileDisclosure
@@ -228,6 +242,7 @@ export default async function Learn({
               <Link
                 key={item.id}
                 className={`lesson-nav ${item.id === id ? 'selected' : ''}`}
+                aria-current={item.id === id ? 'page' : undefined}
                 href={`/learn/${item.id}${previewMode ? '?preview=student' : ''}`}
               >
                 <span>{i + 1}</span>

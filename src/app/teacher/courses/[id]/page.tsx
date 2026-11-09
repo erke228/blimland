@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Eye, Plus, Send, Pencil, BookOpen, Trash2, FileUp } from 'lucide-react';
 import { requireRole } from '@/lib/auth';
-import { all } from '@/lib/db';
+import { all, one } from '@/lib/db';
 import { courseLessons, getCourse } from '@/lib/courses';
 import {
   addSection,
@@ -25,6 +25,9 @@ import { CourseControls } from '@/components/course-controls';
 import { courseInTrash } from '@/lib/course-lifecycle';
 import { FilePicker } from '@/components/file-picker';
 import { LectureTextEditor } from '@/components/lecture-text-editor';
+import { LectureVideoField } from '@/components/lecture-video-field';
+import { LectureEditorSteps } from '@/components/lecture-editor-steps';
+import { MAX_VIDEO_UPLOAD_BYTES } from '@/lib/lesson-videos';
 export default async function CourseEditor({
   params,
   searchParams,
@@ -84,6 +87,13 @@ export default async function CourseEditor({
     ['settings', 'Параметрлер'],
     ['manage', 'Басқару'],
   ];
+  const storedVideo =
+    editing && pane === 'lecture'
+      ? await one<{ sha256: string }>(
+          'SELECT sha256 FROM lesson_videos WHERE lesson_id=?',
+          editing.id,
+        )
+      : undefined;
   return (
     <>
       <PageHeading
@@ -379,101 +389,127 @@ export default async function CourseEditor({
                   >
                     <input type="hidden" name="courseId" value={id} />
                     <input type="hidden" name="lessonId" value={editing?.id || ''} />
-                    <label>
-                      Дәріс атауы
-                      <input
-                        name="title"
-                        required
-                        minLength={3}
-                        maxLength={180}
-                        defaultValue={editing?.title}
-                        placeholder="Мысалы: 1-дәріс. Тақырып атауы"
-                      />
-                    </label>
-                    {!editing && (
-                      <div id="materials" className="new-lecture-document">
-                        <h3>
-                          <FileUp size={19} />
-                          PDF немесе Word қосу
-                        </h3>
-                        <p className="help-text">
-                          Файл міндетті емес. Таңдалған құжат дәріспен бірге сақталып, сайтта
-                          ашылады.
-                        </p>
-                        <DocumentFileInput />
+                    <LectureEditorSteps>
+                      <div className="form-stack">
+                        <label>
+                          Дәріс атауы
+                          <input
+                            name="title"
+                            required
+                            minLength={3}
+                            maxLength={180}
+                            defaultValue={editing?.title}
+                            placeholder="Мысалы: 1-дәріс. Тақырып атауы"
+                          />
+                        </label>
+                        {!editing && (
+                          <div id="materials" className="new-lecture-document">
+                            <h3>
+                              <FileUp size={19} />
+                              PDF немесе Word қосу
+                            </h3>
+                            <p className="help-text">
+                              Файл міндетті емес. Таңдалған құжат дәріспен бірге сақталып, сайтта
+                              ашылады.
+                            </p>
+                            <DocumentFileInput />
+                          </div>
+                        )}
+                        {editing && (
+                          <div className="new-lecture-document">
+                            <h3>
+                              <FileUp size={19} />
+                              PDF / Word құжаттары
+                            </h3>
+                            <p className="help-text">
+                              Құжаттарды бөлек қосуға, ашуға немесе ауыстыруға болады. Бұл беттегі
+                              өзгерістерді алдымен сақтаңыз.
+                            </p>
+                            <Link
+                              className="button outline"
+                              href={`/teacher/courses/${id}?tab=materials&lesson=${editing.id}`}
+                            >
+                              Құжаттарды басқару →
+                            </Link>
+                          </div>
+                        )}
                       </div>
-                    )}
-                    <div className="form-row">
-                      <label>
-                        Бөлім
-                        <select name="sectionId" defaultValue={editing?.section_id}>
-                          {sections.map((s) => (
-                            <option value={s.id} key={s.id}>
-                              {s.title}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label>
-                        Бөлім ішіндегі реті
-                        <input
-                          name="position"
-                          type="number"
-                          min={1}
-                          max={10000}
-                          placeholder="Бөлім соңына"
-                          defaultValue={editing ? editing.position + 1 : undefined}
+                      <div className="form-stack">
+                        <LectureTextEditor initial={editing?.body || ''} />
+                        <LectureVideoField
+                          key={editing?.id || 'new'}
+                          initial={editing?.video_url}
+                          lessonId={editing?.id}
+                          uploadLimit={MAX_VIDEO_UPLOAD_BYTES}
+                          storedSrc={
+                            storedVideo
+                              ? `/learn/${editing!.id}/video?v=${storedVideo.sha256}`
+                              : undefined
+                          }
+                          storedSha256={storedVideo?.sha256}
                         />
-                        <small>Басқа бөлімге ауыстыруға болады.</small>
-                      </label>
-                    </div>
-                    <label>
-                      Қысқаша сипаттама
-                      <textarea
-                        name="summary"
-                        maxLength={500}
-                        rows={2}
-                        defaultValue={editing?.summary}
-                        placeholder="Дәрістің негізгі мазмұны, 1–3 сөйлем."
-                      />
-                    </label>
-                    <label>
-                      Оқу мақсаттары
-                      <textarea
-                        name="objectives"
-                        maxLength={3000}
-                        rows={3}
-                        defaultValue={editing?.objectives}
-                        placeholder="Әр мақсатты жаңа жолдан жазыңыз."
-                      />
-                      <small>Дәрісті аяқтаған студент нені түсінеді немесе орындай алады?</small>
-                    </label>
-                    <LectureTextEditor initial={editing?.body || ''} />
-                    <label>
-                      Бейнефайлға HTTPS сілтеме
-                      <input
-                        name="videoUrl"
-                        type="url"
-                        maxLength={2000}
-                        defaultValue={editing?.video_url}
-                        placeholder="https://…/lecture.mp4"
-                      />
-                      <small>
-                        Тікелей MP4/WebM бейнефайл сілтемесі. Бейне жүктеу және транскодтау әлі
-                        қосылмаған.
-                      </small>
-                    </label>
-                    <label>
-                      Ұзақтығы, минут
-                      <input
-                        name="minutes"
-                        type="number"
-                        min={1}
-                        max={600}
-                        required
-                        defaultValue={editing?.duration_minutes || 45}
-                      />
-                    </label>
+                      </div>
+                      <div className="form-stack">
+                        <div className="form-row">
+                          <label>
+                            Бөлім
+                            <select name="sectionId" defaultValue={editing?.section_id}>
+                              {sections.map((s) => (
+                                <option value={s.id} key={s.id}>
+                                  {s.title}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label>
+                            Бөлім ішіндегі реті
+                            <input
+                              name="position"
+                              type="number"
+                              min={1}
+                              max={10000}
+                              placeholder="Бөлім соңына"
+                              defaultValue={editing ? editing.position + 1 : undefined}
+                            />
+                            <small>Басқа бөлімге ауыстыруға болады.</small>
+                          </label>
+                        </div>
+                        <label>
+                          Қысқаша сипаттама
+                          <textarea
+                            name="summary"
+                            maxLength={500}
+                            rows={2}
+                            defaultValue={editing?.summary}
+                            placeholder="Дәрістің негізгі мазмұны, 1–3 сөйлем."
+                          />
+                        </label>
+                        <label>
+                          Оқу мақсаттары
+                          <textarea
+                            name="objectives"
+                            maxLength={3000}
+                            rows={3}
+                            defaultValue={editing?.objectives}
+                            placeholder="Әр мақсатты жаңа жолдан жазыңыз."
+                          />
+                          <small>
+                            Дәрісті аяқтаған студент нені түсінеді немесе орындай алады?
+                          </small>
+                        </label>
+                        <label>
+                          Ұзақтығы, минут
+                          <input
+                            name="minutes"
+                            type="number"
+                            min={1}
+                            max={600}
+                            required
+                            defaultValue={editing?.duration_minutes || 45}
+                          />
+                        </label>
+                      </div>
+                    </LectureEditorSteps>
                     {editing?.is_preview ? <input type="hidden" name="preview" value="on" /> : null}
                     <p className="help-text">
                       Курс жарияланғаннан кейін барлық дәріс ашық болады. Студенттер оларды кез

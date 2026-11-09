@@ -5,6 +5,10 @@ import { currentUser } from '@/lib/auth';
 import { Navigation } from '@/components/navigation';
 import { logout } from './actions';
 import { settings } from '@/lib/management';
+import { ownProfile } from '@/lib/profile';
+import { ThemeControl } from '@/components/theme-control';
+import { AvatarImage } from '@/components/avatar-image';
+import { themeBootstrap } from '@/lib/theme';
 import '@fontsource/noto-sans/400.css';
 import '@fontsource/noto-sans/500.css';
 import '@fontsource/noto-sans/600.css';
@@ -17,6 +21,7 @@ import './documents.css';
 import './library.css';
 import './mobile.css';
 import './learning-tools.css';
+import './theme.css';
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
@@ -37,9 +42,17 @@ export async function generateMetadata(): Promise<Metadata> {
 export const dynamic = 'force-dynamic';
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const user = await currentUser();
+  const profile = user ? await ownProfile(user.id) : undefined;
+  const avatarSrc = profile?.has_avatar
+    ? `/api/profile/avatar?v=${profile.avatar_version}`
+    : undefined;
+  const avatarKey = `${user?.id}:${profile?.avatar_version}`;
   const site = await settings();
   return (
-    <html lang="kk" data-scroll-behavior="smooth">
+    <html lang="kk" data-scroll-behavior="smooth" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
+      </head>
       <body data-role={user?.role || 'guest'}>
         <a className="skip-content" href="#main-content">
           Мазмұнға өту
@@ -48,6 +61,16 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           role={user?.role}
           siteName={site.site_name}
           institutionName={site.institution_name}
+          avatar={
+            user && (
+              <AvatarImage
+                key={avatarKey}
+                className="workspace-icon"
+                src={avatarSrc}
+                name={user.name}
+              />
+            )
+          }
         />
         <div className="app-shell">
           <header className="topbar">
@@ -62,6 +85,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               <span>{site.institution_name} · Оқу кеңістігі</span>
             </div>
             <div className="account-nav">
+              <ThemeControl />
               <span className="language-badge">ҚАЗ</span>
               {user ? (
                 <>
@@ -70,7 +94,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                     href="/profile"
                     aria-label={`${user.name} — менің профилім`}
                   >
-                    <span className="avatar">{user.name[0]}</span>
+                    <AvatarImage
+                      key={avatarKey}
+                      className="avatar"
+                      src={avatarSrc}
+                      name={user.name}
+                    />
                     <span>{user.name}</span>
                   </Link>
                   <form action={logout}>

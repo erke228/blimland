@@ -238,3 +238,70 @@
 .lecture-text-editor .lesson-body {
   overflow-wrap: anywhere;
 }
+label.video-replace-confirm {
+  min-height: 44px;
+  font-size: 14px;
+  line-height: 1.65;
+}
+.video-upload-meter {
+  width: 100%;
+}
+.lecture-step-nav {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 16px 0;
+}
+.lecture-step-nav button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 12px;
+  border: 1px solid var(--border, #d9e4e7);
+  border-radius: 12px;
+  background: white;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+.lecture-step-nav button[aria-current='step'] {
+  border-color: #008c82;
+  background: #e9f6f2;
+  color: #006b65;
+  font-weight: 700;
+}
+.lecture-step-nav button span {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #f0f5f5;
+}
+.lecture-composer-panel[hidden] {
+  display: none;
+}
+.lecture-composer-panel {
+  padding: 16px 0;
+}
+.lecture-step-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 12px 0;
+}
+@media (max-width: 600px) {
+  .lecture-step-nav {
+    grid-template-columns: 1fr;
+  }
+  .lecture-step-nav button {
+    min-height: 44px;
+  }
+  .lecture-step-actions .button {
+    flex: 1;
+  }
+}

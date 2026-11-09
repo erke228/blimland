@@ -63,9 +63,13 @@ export async function getCourse(id: string) {
   return await one<Course>(`${courseSelect} WHERE c.id = ?`, id);
 }
 export async function courseLessons(id: string) {
-  return await all<Lesson>(
+  return await all<Lesson & { has_video: number; has_pdf: number; has_docx: number }>(
     `SELECT l.*, s.title AS section_title, s.course_id, COALESCE(d.summary, '') summary,
-    COALESCE(d.objectives, '') objectives FROM lessons l JOIN sections s ON s.id = l.section_id
+    COALESCE(d.objectives, '') objectives,
+    (l.video_url!='' OR EXISTS(SELECT 1 FROM lesson_videos v WHERE v.lesson_id=l.id)) has_video,
+    EXISTS(SELECT 1 FROM lesson_materials m WHERE m.lesson_id=l.id AND m.kind='pdf' AND m.removed_at IS NULL) has_pdf,
+    EXISTS(SELECT 1 FROM lesson_materials m WHERE m.lesson_id=l.id AND m.kind='docx' AND m.removed_at IS NULL) has_docx
+    FROM lessons l JOIN sections s ON s.id = l.section_id
     LEFT JOIN lesson_details d ON d.lesson_id = l.id
     WHERE s.course_id = ? AND NOT EXISTS(SELECT 1 FROM section_trash t WHERE t.section_id=s.id) ORDER BY s.position, l.position, l.id`,
     id,

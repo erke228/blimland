@@ -1,0 +1,518 @@
+:root {
+  color-scheme: light;
+}
+.theme-menu {
+  position: relative;
+  flex-shrink: 0;
+}
+.theme-menu > summary {
+  list-style: none;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 13px;
+}
+.theme-menu > summary::-webkit-details-marker {
+  display: none;
+}
+.theme-dark-icon {
+  display: none;
+}
+.theme-options {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 210px;
+  padding: 7px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--paper);
+  box-shadow: 0 12px 40px #0002;
+  z-index: 100;
+}
+.theme-options button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  border: 0;
+  border-radius: 8px;
+  padding: 10px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 14px;
+  cursor: pointer;
+  text-align: left;
+}
+.theme-options button span {
+  flex: 1;
+  white-space: nowrap;
+}
+.theme-options button:hover,
+.theme-options button[aria-pressed='true'] {
+  background: var(--teal-light);
+}
+.theme-options button[aria-pressed='true'] {
+  color: var(--teal);
+  font-weight: 600;
+}
+html[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #101916;
+  --paper: #18241f;
+  --ink: #e7f0eb;
+  --muted: #a5b8b1;
+  --teal: #7ddbc2;
+  --teal-dark: #9ae9d5;
+  --teal-light: #203c32;
+  --line: #344d43;
+  --surface-raised: #20312a;
+  --field-line: #536e64;
+}
+html[data-theme='dark'] .theme-light-icon {
+  display: none;
+}
+html[data-theme='dark'] .theme-dark-icon {
+  display: block;
+}
+html[data-theme='dark'] body {
+  background: var(--bg);
+  color: var(--ink);
+}
+html[data-theme='dark']
+  :is(
+    .sidebar,
+    .topbar,
+    .mobile-bottom-nav,
+    .panel,
+    .course-card,
+    .stat-card,
+    .table-panel,
+    .auth-panel,
+    .profile-panel,
+    .enrollment-panel,
+    .lesson-sidebar,
+    .editor-sidebar,
+    .editor-main > section,
+    .profile-edit-panel,
+    .profile-community,
+    .profile-workspace,
+    .study-group,
+    .person-card,
+    .basic-profile,
+    .management-filters,
+    .admin-quicklinks > a,
+    .empty-state,
+    .lecture-text-editor,
+    .lesson-stages,
+    .document-frame,
+    .knowledge-check,
+    .python-practice,
+    .editor-status,
+    .library-sort > div
+  ) {
+  background: var(--paper);
+  border-color: var(--line);
+  box-shadow: none;
+}
+html[data-theme='dark'] :is(.hero, .auth-quote, .learning-welcome) {
+  background: #19342b;
+  border-color: var(--line);
+}
+html[data-theme='dark']
+  :is(
+    h1,
+    h2,
+    h3,
+    h4,
+    .brand-text,
+    .mobile-brand strong,
+    .profile-identity h2,
+    .course-card h3,
+    .panel h2,
+    .lesson-body,
+    .quiz-question,
+    .person-name,
+    .admin-quicklinks strong
+  ) {
+  color: var(--ink);
+}
+html[data-theme='dark']
+  :is(
+    .muted,
+    .help-text,
+    .page-heading p,
+    .hero p,
+    .hero-note,
+    .course-description,
+    .teacher-line,
+    .level,
+    .card-footer,
+    .topbar-context,
+    .nav-caption,
+    .sidebar-foot,
+    .workspace div > span,
+    .main-footer,
+    .profile-identity div > span,
+    .profile-language,
+    .profile-caption,
+    .group-teacher,
+    .people-label,
+    .community-privacy,
+    .community-empty p,
+    .profile-workspace p,
+    .document-heading small,
+    .lesson-teacher,
+    .lesson-overview > summary,
+    .lecture-meta,
+    .lecture-parent,
+    .library-result-count,
+    .file-picker-target small,
+    .file-picker-selection small,
+    .lesson-access-note,
+    .video-progress-note,
+    .stage-hint,
+    .data-table th,
+    .result-count,
+    .auth-panel > p,
+    .auth-switch,
+    .auth-intro p,
+    .stat-card > span,
+    .stat-card .stat-label,
+    .enrollment-panel p,
+    .course-progress,
+    .profile-details dt
+  ) {
+  color: var(--muted);
+}
+html[data-theme='dark']
+  :is(
+    .category-label,
+    .text-link,
+    .login-link,
+    .auth-switch a,
+    .filter-reset,
+    .profile-section-heading,
+    .document-section-title,
+    .lesson-overview > summary,
+    .lesson-objectives summary
+  ) {
+  color: var(--teal);
+}
+html[data-theme='dark']
+  :is(
+    .nav-link,
+    .account,
+    .text-button,
+    .workspace-tabs a,
+    .profile-tabs a,
+    .document-tabs button,
+    .stage-navigation button,
+    .library-view a,
+    .library-sort summary,
+    .document-links a,
+    .pdf-toolbar button,
+    .lesson-program a
+  ) {
+  color: var(--muted);
+}
+html[data-theme='dark']
+  :is(
+    .nav-link:hover,
+    .nav-link.active,
+    .workspace-tabs a.selected,
+    .profile-tabs a.active,
+    .profile-tabs a.selected,
+    .library-view a.selected,
+    .document-tabs button[aria-pressed='true'],
+    .stage-navigation button[aria-current='step'],
+    .mobile-bottom-nav a.active,
+    .lecture-step-nav button[aria-current='step']
+  ) {
+  background: var(--teal-light);
+  color: var(--teal);
+  border-color: var(--teal);
+}
+html[data-theme='dark']
+  :is(
+    .workspace,
+    .workspace-icon,
+    .library-view,
+    .workspace-tabs,
+    .profile-tabs,
+    .stage-navigation,
+    .first-lecture-link,
+    .new-lecture-document,
+    .request-review-note,
+    .file-picker-selection,
+    .profile-secondary-menu,
+    .student-answer,
+    .assessment-attempt,
+    .resource-tags span,
+    .badge,
+    .tiny-avatar,
+    .avatar,
+    .profile-avatar,
+    .person-avatar,
+    .empty-icon,
+    .library-summary > span,
+    .profile-workspace-link,
+    .pdf-toolbar,
+    .document-tabs button,
+    .lecture-step-nav button,
+    .lecture-step-nav button span,
+    .learning-stats > div,
+    .course-benefits,
+    .lesson-access-note
+  ) {
+  background: var(--surface-raised);
+  border-color: var(--line);
+  color: var(--ink);
+}
+html[data-theme='dark'] :is(input:not([type='checkbox']):not([type='radio']), textarea, select) {
+  background: #111e18;
+  color: var(--ink);
+  border-color: var(--field-line);
+}
+html[data-theme='dark'] :is(input, textarea)::placeholder {
+  color: #94a99f;
+  opacity: 1;
+}
+html[data-theme='dark'] :is(input[type='checkbox'], input[type='radio'], progress) {
+  accent-color: var(--teal);
+}
+html[data-theme='dark'] :focus-visible {
+  outline: 3px solid #7ddbc2;
+  outline-offset: 3px;
+}
+html[data-theme='dark']
+  :is(.button.primary, .button.dark, .library-search-submit, .mobile-brand > span, .brand-icon) {
+  background: #7ddbc2;
+  color: #10211b;
+  border-color: #7ddbc2;
+}
+html[data-theme='dark']
+  :is(.button.primary:hover, .button.dark:hover, .library-search-submit:hover) {
+  background: #9ae9d5;
+  color: #10211b;
+}
+html[data-theme='dark'] .button.outline {
+  background: transparent;
+  color: var(--teal);
+  border-color: var(--field-line);
+}
+html[data-theme='dark'] .button.outline:hover {
+  background: var(--teal-light);
+}
+html[data-theme='dark'] :is(.notice, .quiz-result, .site-announcement) {
+  background: #203c32;
+  color: #b6efd3;
+  border-color: #426c54;
+}
+html[data-theme='dark'] :is(.notice.error, .error-message, .field-error) {
+  background: #382227;
+  color: #ffb4af;
+  border-color: #91595b;
+}
+html[data-theme='dark'] :is(.badge.warning, .badge.pending, .status-pending) {
+  background: #372e1f;
+  color: #f2ce8d;
+}
+html[data-theme='dark'] :is(.badge.published, .badge.approved, .status-active) {
+  background: #203c32;
+  color: #b6efd3;
+}
+html[data-theme='dark'] :is(.badge.archived, .badge.rejected) {
+  background: #382227;
+  color: #ffb4af;
+}
+html[data-theme='dark'] :is(.file-picker .file-picker-target, .file-picker-icon) {
+  background: #1e382c;
+  border-color: #536e64;
+  color: var(--teal);
+}
+html[data-theme='dark'] .file-picker-target strong {
+  color: var(--ink);
+}
+html[data-theme='dark'] :is(.resume-learning, .count-pill, .category-tab) {
+  background: var(--surface-raised);
+  border-color: var(--line);
+  color: var(--muted);
+}
+html[data-theme='dark'] :is(.resume-kicker, .category-tab.selected) {
+  color: var(--teal);
+}
+html[data-theme='dark'] :is(.resume-learning > p, .resume-progress) {
+  color: var(--muted);
+}
+html[data-theme='dark'] .resume-progress progress {
+  background: var(--line);
+}
+html[data-theme='dark'] .resume-progress progress::-webkit-progress-bar {
+  background: var(--line);
+}
+html[data-theme='dark'] .category-tab.selected {
+  background: var(--teal-light);
+  border-color: var(--field-line);
+}
+html[data-theme='dark'] .category-tab:hover {
+  border-color: var(--teal);
+}
+html[data-theme='dark'] .catalog-tools .search-field {
+  background: #111e18;
+  border-color: var(--field-line);
+  color: var(--muted);
+}
+html[data-theme='dark'] .catalog-tools .search-field input {
+  background: transparent;
+}
+html[data-theme='dark']
+  :is(.python-code, .python-output, .python-practice pre, .lesson-body pre, .lesson-body code) {
+  background: #0c1512;
+  color: #ccecdf;
+  border-color: var(--line);
+}
+html[data-theme='dark'] :is(.quiz-option:hover, .data-table tbody tr:hover) {
+  background: var(--surface-raised);
+}
+html[data-theme='dark'] .quiz-option:has(input:checked) {
+  background: var(--teal-light);
+  border-color: var(--teal);
+}
+html[data-theme='dark']
+  :is(
+    .data-table td,
+    .data-table th,
+    .card-footer,
+    .profile-identity,
+    .document-heading,
+    .lesson-program li,
+    .workspace-tabs,
+    .topbar,
+    .main-footer,
+    .mobile-bottom-nav
+  ) {
+  border-color: var(--line);
+}
+/* Keep document paper and artwork true to the source. */
+html[data-theme='dark'] .document-html {
+  background: white;
+  color: #172b32;
+  color-scheme: light;
+}
+html[data-theme='dark'] .document-html :is(p, h1, h2, h3, h4, span, strong, td, th) {
+  color: inherit;
+}
+html[data-theme='dark'] :is(.stage-navigation button[aria-pressed='true'], .lesson-nav.selected) {
+  background: var(--teal-light);
+  color: var(--teal);
+  border-color: var(--teal);
+}
+html[data-theme='dark'] :is(.hero h2 em, .lecture-summary, .lecture-objectives summary) {
+  color: var(--ink);
+}
+html[data-theme='dark'] :is(label, .profile-teaching-lesson > a, .profile-details dd) {
+  color: var(--ink);
+}
+html[data-theme='dark']
+  :is(.eyebrow, .profile-teaching-lesson small, .profile-teaching-course > p, .back-link) {
+  color: var(--muted);
+}
+html[data-theme='dark'] .status-badge {
+  background: var(--surface-raised);
+  color: var(--ink);
+  border-color: var(--line);
+}
+html[data-theme='dark'] :is(.status-badge.published, .status-badge.approved) {
+  background: #203c32;
+  color: #b6efd3;
+}
+html[data-theme='dark'] :is(.status-badge.pending, .status-badge.submitted) {
+  background: #372e1f;
+  color: #f2ce8d;
+}
+html[data-theme='dark'] :is(.status-badge.archived, .status-badge.rejected) {
+  background: #382227;
+  color: #ffb4af;
+}
+@media (max-width: 760px) {
+  .theme-menu > summary {
+    padding: 10px;
+  }
+  .theme-menu > summary > span {
+    display: none;
+  }
+  .theme-options {
+    right: -44px;
+  }
+}
+html[data-theme='dark'] :is(.hero-lecture, .hero-tag, .value-strip > span) {
+  background: var(--surface-raised);
+  border-color: var(--line);
+  color: var(--ink);
+}
+html[data-theme='dark'] :is(.hero-lecture b, .hero-lecture > svg) {
+  color: var(--teal);
+}
+html[data-theme='dark'] .hero-lecture small {
+  color: var(--muted);
+}
+html[data-theme='dark'] .mobile-bottom-nav a.selected {
+  background: var(--teal-light);
+  color: var(--teal);
+}
+html[data-theme='dark'] :is(.disclosure-toggle, .disclosure-toggle strong, .description-toggle) {
+  color: var(--ink);
+}
+html[data-theme='dark'] .disclosure-toggle small {
+  color: var(--muted);
+}
+html[data-theme='dark'] .disclosure-badge {
+  background: var(--teal-light);
+  color: var(--teal);
+}
+html[data-theme='dark'] .library-search-submit svg {
+  color: #10211b;
+}
+html[data-theme='dark'] :is(.program-section, .program-lesson) {
+  background: var(--paper);
+  border-color: var(--line);
+  color: var(--ink);
+}
+html[data-theme='dark'] :is(.program-lesson strong, .program-section h3) {
+  color: var(--ink);
+}
+html[data-theme='dark'] :is(.detail-description, .detail-meta, .included, .program-lesson small) {
+  color: var(--muted);
+}
+html[data-theme='dark'] .lesson-number {
+  background: var(--surface-raised);
+  color: var(--teal);
+}
+html[data-theme='dark'] .program-lesson:hover {
+  background: var(--surface-raised);
+}
+html[data-theme='dark'] .program-section > h3 {
+  background: var(--surface-raised);
+  color: var(--ink);
+  border-color: var(--line);
+}
+@media print {
+  .theme-menu {
+    display: none;
+  }
+  html[data-theme='dark'] body {
+    background: white;
+    color: #172b32;
+  }
+}

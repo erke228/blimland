@@ -17,7 +17,6 @@ import {
   acceptInvitation,
   removeMember,
   updateUser,
-  updateOwnProfile,
   revokeUserSessions,
   saveSettings,
   recordAudit,
@@ -28,7 +27,7 @@ async function perform<T>(path: string, work: () => T | Promise<T>): Promise<T> 
     return await work();
   } catch (error) {
     if (error instanceof ManagementError)
-      redirect(`${path}?error=${encodeURIComponent(error.code)}`);
+      redirect(`${path}${path.includes('?') ? '&' : '?'}error=${encodeURIComponent(error.code)}`);
     throw error;
   }
 }
@@ -143,22 +142,27 @@ export async function revokeSessionsAction(form: FormData) {
 }
 export async function saveProfileAction(form: FormData) {
   const user = await requireUser();
+  const contacts = v(form, 'profileTab') === 'contacts';
   await perform(
-    '/profile',
+    contacts ? '/profile?tab=contacts' : '/profile',
     async () =>
-      await saveExtendedProfile(user.id, {
-        name: v(form, 'name'),
-        department: v(form, 'department'),
-        academic_title: v(form, 'academicTitle'),
-        university: v(form, 'university'),
-        bio: v(form, 'about'),
-        phone: v(form, 'phone'),
-        city: v(form, 'city'),
-        website: v(form, 'website'),
-      }),
+      await saveExtendedProfile(
+        user.id,
+        {
+          name: v(form, 'name'),
+          department: v(form, 'department'),
+          academic_title: v(form, 'academicTitle'),
+          university: v(form, 'university'),
+          bio: v(form, 'about'),
+          phone: v(form, 'phone'),
+          city: v(form, 'city'),
+          website: v(form, 'website'),
+        },
+        contacts ? 'contacts' : 'personal',
+      ),
   );
   revalidatePath('/', 'layout');
-  redirect('/profile?success=saved');
+  redirect(contacts ? '/profile?tab=contacts&success=saved' : '/profile?success=saved');
 }
 export async function saveSettingsAction(form: FormData) {
   const user = await requireRole('admin');

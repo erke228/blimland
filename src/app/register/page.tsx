@@ -1,9 +1,8 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { currentUser } from '@/lib/auth';
-import { register } from '../actions';
 import { Notice } from '@/components/ui';
-import { SubmitButton } from '@/components/submit-button';
+import { RegisterForm } from '@/components/register-form';
 import { safeReturnPath, settings } from '@/lib/management';
 export default async function Register({
   searchParams,
@@ -43,39 +42,7 @@ export default async function Register({
             Ашық тіркелу уақытша жабық. Университет әкімшісіне хабарласыңыз.
           </div>
         )}
-        {open && (
-          <form action={register} className="form-stack">
-            <input type="hidden" name="next" value={next} />
-            <label>
-              Аты-жөніңіз
-              <input name="name" required minLength={2} maxLength={80} autoComplete="name" />
-            </label>
-            <label>
-              Email
-              <input
-                type="email"
-                name="email"
-                required
-                maxLength={254}
-                autoComplete="email"
-                placeholder="name@example.kz"
-              />
-            </label>
-            <label>
-              Құпиясөз
-              <input
-                type="password"
-                name="password"
-                required
-                minLength={12}
-                maxLength={128}
-                autoComplete="new-password"
-              />
-              <small>Кемінде 12 таңба қолданыңыз.</small>
-            </label>
-            <SubmitButton>Тіркелу →</SubmitButton>
-          </form>
-        )}
+        {open && <RegisterForm next={next} />}
         <p className="auth-switch">
           Аккаунтыңыз бар ма?{' '}
           <Link href={next ? `/login?next=${encodeURIComponent(next)}` : '/login'}>Кіру</Link>
